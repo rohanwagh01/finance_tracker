@@ -47,7 +47,12 @@ impl AppState {
     }
 
     pub async fn close_session(&self) {
-        *self.session.write().await = None;
+        let taken = self.session.write().await.take();
+        if let Some(s) = taken {
+            // Fully close the pool so the DB file is no longer held open
+            // (matters before deleting it in vault_reset).
+            s.db.pool.close().await;
+        }
     }
 
     pub async fn is_unlocked(&self) -> bool {

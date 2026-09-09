@@ -9,6 +9,18 @@ use crate::error::{AppError, AppResult};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
+/// True when a sqlx error is SQLCipher rejecting the key (wrong password) —
+/// SQLITE_NOTADB (26) / "file is not a database" / "file is encrypted".
+fn is_wrong_key(e: &sqlx::Error) -> bool {
+    if let sqlx::Error::Database(d) = e {
+        let msg = d.message().to_ascii_lowercase();
+        return d.code().as_deref() == Some("26")
+            || msg.contains("not a database")
+            || msg.contains("file is encrypted");
+    }
+    false
+}
+
 #[derive(Clone)]
 pub struct Db {
     pub pool: SqlitePool,
@@ -18,10 +30,10 @@ impl Db {
     /// Open a SQLCipher-encrypted database at `path` with the given hex key
     /// (64 hex chars = 32 bytes), then run pending migrations.
     ///
-    /// `PRAGMA key` is emitted first by sqlx's connect-options handling, before
-    /// any other pragma. A wrong key makes the first real statement fail with
-    /// "file is not a database" — surfaced here as an `Invalid` error so the
-    /// caller can show "incorrect password".
+    /// `PRAGMA key` is emitted first by sqlx's connect-options handling. When
+    /// the key is wrong SQLCipher fails either at connect (the `journal_mode`
+    /// pragma reads the header) or on the first query — both are mapped to
+    /// `Invalid("incorrect password")`.
     pub async fn connect_encrypted(path: &Path, key_hex: &str) -> AppResult<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).ok();
@@ -36,16 +48,26 @@ impl Db {
             .pragma("journal_mode", "WAL")
             .pragma("synchronous", "NORMAL");
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(opts)
-            .await?;
+        let pool = match SqlitePoolOptions::new().max_connections(5).connect_with(opts).await {
+            Ok(p) => p,
+            Err(e) if is_wrong_key(&e) => {
+                return Err(AppError::Invalid("incorrect password".into()))
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         // Validate the key before touching migrations.
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sqlite_master")
+        if let Err(e) = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sqlite_master")
             .fetch_one(&pool)
             .await
-            .map_err(|_| AppError::Invalid("incorrect password".into()))?;
+        {
+            pool.close().await;
+            return Err(if is_wrong_key(&e) {
+                AppError::Invalid("incorrect password".into())
+            } else {
+                e.into()
+            });
+        }
 
         MIGRATOR.run(&pool).await?;
 
@@ -56,11 +78,18 @@ impl Db {
     /// first (wrong key → `Invalid("current password is incorrect")`). Run this
     /// with no other connections open to the file.
     pub async fn rekey(path: &Path, old_key_hex: &str, new_key_hex: &str) -> AppResult<()> {
-        let mut conn = SqliteConnectOptions::new()
+        let mut conn = match SqliteConnectOptions::new()
             .filename(path)
             .pragma("key", format!("\"x'{old_key_hex}'\""))
             .connect()
-            .await?;
+            .await
+        {
+            Ok(c) => c,
+            Err(e) if is_wrong_key(&e) => {
+                return Err(AppError::Invalid("current password is incorrect".into()))
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM sqlite_master")
             .fetch_one(&mut conn)
@@ -108,10 +137,11 @@ mod tests {
             db.pool.close().await;
         }
 
-        assert!(
-            Db::connect_encrypted(&path, key2).await.is_err(),
-            "wrong key must be rejected"
-        );
+        match Db::connect_encrypted(&path, key2).await {
+            Err(AppError::Invalid(m)) => assert!(m.contains("incorrect password")),
+            Err(e) => panic!("wrong key should give Invalid, got {e:?}"),
+            Ok(_) => panic!("wrong key should not open the database"),
+        }
 
         let db = Db::connect_encrypted(&path, key1).await.unwrap();
         let v: String = sqlx::query_scalar("SELECT value FROM app_config WHERE key = 'k'")

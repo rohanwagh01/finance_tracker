@@ -46,12 +46,23 @@ pub async fn vault_initialize(state: State<'_, AppState>, password: String) -> A
     }
     validate_password(&password)?;
 
+    remove_db_files(&state.paths.db);
+
     let meta = VaultMeta::generate();
     let key = vault::derive_key_hex(&password, &meta.kdf)?;
     let db = Db::connect_encrypted(&state.paths.db, &key).await?;
     vault::write_meta(&state.paths.meta, &meta)?;
     state.open_session(db).await;
     Ok(())
+}
+
+fn remove_db_files(db: &std::path::Path) {
+    let _ = std::fs::remove_file(db);
+    for ext in ["-wal", "-shm", "-journal"] {
+        let mut sib = db.as_os_str().to_owned();
+        sib.push(ext);
+        let _ = std::fs::remove_file(PathBuf::from(sib));
+    }
 }
 
 #[tauri::command]
@@ -109,13 +120,7 @@ pub async fn vault_change_password(
 #[tauri::command]
 pub async fn vault_reset(state: State<'_, AppState>) -> AppResult<()> {
     state.close_session().await;
-    let db = &state.paths.db;
-    let _ = std::fs::remove_file(db);
-    for ext in ["-wal", "-shm", "-journal"] {
-        let mut sib = db.clone().into_os_string();
-        sib.push(ext);
-        let _ = std::fs::remove_file(PathBuf::from(sib));
-    }
+    remove_db_files(&state.paths.db);
     let _ = std::fs::remove_file(&state.paths.meta);
     Ok(())
 }
