@@ -48,8 +48,11 @@ npm run build                   # type-check + bundle the frontend
 
 ## Status
 
-Milestone 1 complete: app shell, onboarding, settings, keychain-backed credentials,
-SQLite schema + migrations, people management, HTTP allowlist, research privacy guard.
+- **Milestone 1** — app shell, onboarding, settings, keychain credentials, SQLite
+  schema + migrations, people management, HTTP allowlist, research privacy guard.
+- **Milestone 2** — Plaid Hosted Link + polling, account/balance/transaction sync
+  (cursor-based), institution linking/unlinking, per-account shared/hidden flags,
+  the **Accounts** page. Shared-card charges auto-route to the review inbox.
 
-Next: Plaid Link + transaction sync (2–3), attribution review inbox (4),
-SnapTrade + portfolio (5), over-time charts (6), net worth page (7), research (8).
+Next: Spending UI (3), attribution review inbox (4), SnapTrade + portfolio (5),
+over-time charts (6), net worth page (7), research (8).

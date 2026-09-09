@@ -52,4 +52,25 @@ impl AppState {
     pub async fn plaid_env(&self) -> AppResult<PlaidEnv> {
         Ok(PlaidEnv::parse(&self.config_get_or("plaid_env", "sandbox").await?))
     }
+
+    /// Whether a well-known credential is stored, answered from a non-secret
+    /// registry in `app_config` so the startup UI never touches the keychain.
+    /// Self-heals: the first lookup per key falls back to the vault (one
+    /// keychain prompt, ever) and records the answer.
+    pub async fn credential_present(&self, name: &str) -> AppResult<bool> {
+        let cfg_key = format!("cred:{name}");
+        match self.config_get(&cfg_key).await? {
+            Some(v) => Ok(v == "1"),
+            None => {
+                let present = self.secrets.exists(name)?;
+                self.config_set(&cfg_key, if present { "1" } else { "0" }).await?;
+                Ok(present)
+            }
+        }
+    }
+
+    pub async fn set_credential_present(&self, name: &str, present: bool) -> AppResult<()> {
+        self.config_set(&format!("cred:{name}"), if present { "1" } else { "0" })
+            .await
+    }
 }

@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "./lib/api";
 import Onboarding from "./routes/Onboarding";
 import Dashboard from "./routes/Dashboard";
+import Accounts from "./routes/Accounts";
 import Spending from "./routes/Spending";
 import Investments from "./routes/Investments";
 import NetWorth from "./routes/NetWorth";
@@ -11,6 +12,7 @@ import SettingsPage from "./routes/Settings";
 
 const NAV = [
   { to: "/", label: "Dashboard", end: true },
+  { to: "/accounts", label: "Accounts" },
   { to: "/spending", label: "Spending" },
   { to: "/investments", label: "Investments" },
   { to: "/net-worth", label: "Net Worth" },
@@ -72,6 +74,7 @@ export default function App() {
         <div className="mx-auto max-w-5xl">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/accounts" element={<Accounts />} />
             <Route path="/spending" element={<Spending />} />
             <Route path="/investments" element={<Investments />} />
             <Route path="/net-worth" element={<NetWorth />} />

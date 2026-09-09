@@ -6,6 +6,7 @@ mod providers;
 mod research;
 mod secrets;
 mod state;
+mod sync;
 mod util;
 
 use tauri::Manager;
@@ -44,6 +45,15 @@ pub fn run() {
             commands::people::create_person,
             commands::people::update_person,
             commands::people::delete_person,
+            commands::accounts::plaid_link_start,
+            commands::accounts::plaid_link_poll,
+            commands::accounts::list_items,
+            commands::accounts::list_accounts,
+            commands::accounts::sync_item,
+            commands::accounts::sync_all,
+            commands::accounts::unlink_item,
+            commands::accounts::set_account_shared,
+            commands::accounts::set_account_hidden,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

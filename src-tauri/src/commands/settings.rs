@@ -71,16 +71,16 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> AppResult<SetupStat
     let s = &*state;
     let llm_provider = s.config_get_or("llm_provider", "none").await?;
     let llm_configured = match llm_provider.as_str() {
-        "anthropic" => s.secrets.exists(keys::ANTHROPIC_API_KEY)?,
+        "anthropic" => s.credential_present(keys::ANTHROPIC_API_KEY).await?,
         "ollama" => true,
         _ => false,
     };
     Ok(SetupStatus {
         onboarding_complete: s.config_get("onboarding_complete").await?.as_deref() == Some("true"),
-        plaid_configured: s.secrets.exists(keys::PLAID_CLIENT_ID)?
-            && s.secrets.exists(keys::PLAID_SECRET)?,
-        snaptrade_configured: s.secrets.exists(keys::SNAPTRADE_CLIENT_ID)?
-            && s.secrets.exists(keys::SNAPTRADE_CONSUMER_KEY)?,
+        plaid_configured: s.credential_present(keys::PLAID_CLIENT_ID).await?
+            && s.credential_present(keys::PLAID_SECRET).await?,
+        snaptrade_configured: s.credential_present(keys::SNAPTRADE_CLIENT_ID).await?
+            && s.credential_present(keys::SNAPTRADE_CONSUMER_KEY).await?,
         llm_provider,
         llm_configured,
     })
@@ -88,15 +88,14 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> AppResult<SetupStat
 
 #[tauri::command]
 pub async fn list_credentials(state: State<'_, AppState>) -> AppResult<Vec<CredentialStatus>> {
-    keys::WELL_KNOWN
-        .iter()
-        .map(|name| {
-            Ok(CredentialStatus {
-                name: (*name).to_string(),
-                present: state.secrets.exists(name)?,
-            })
-        })
-        .collect()
+    let mut out = Vec::with_capacity(keys::WELL_KNOWN.len());
+    for name in keys::WELL_KNOWN {
+        out.push(CredentialStatus {
+            name: (*name).to_string(),
+            present: state.credential_present(name).await?,
+        });
+    }
+    Ok(out)
 }
 
 #[tauri::command]
@@ -112,7 +111,8 @@ pub async fn save_credential(
     if value.is_empty() {
         return Err(AppError::Invalid("value must not be empty".into()));
     }
-    state.secrets.set(&name, value)
+    state.secrets.set(&name, value)?;
+    state.set_credential_present(&name, true).await
 }
 
 #[tauri::command]
@@ -120,7 +120,8 @@ pub async fn delete_credential(state: State<'_, AppState>, name: String) -> AppR
     if !keys::WELL_KNOWN.contains(&name.as_str()) {
         return Err(AppError::Invalid(format!("unknown credential name: {name}")));
     }
-    state.secrets.delete(&name)
+    state.secrets.delete(&name)?;
+    state.set_credential_present(&name, false).await
 }
 
 #[tauri::command]

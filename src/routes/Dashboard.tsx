@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { money } from "../lib/format";
 import { Banner, Card } from "../components/ui";
 
 function StatusRow({ label, ok }: { label: string; ok: boolean }) {
@@ -16,6 +18,15 @@ function StatusRow({ label, ok }: { label: string; ok: boolean }) {
 export default function Dashboard() {
   const setup = useQuery({ queryKey: ["setup-status"], queryFn: api.getSetupStatus });
   const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
+
+  const visible = (accounts.data ?? []).filter((a) => !a.is_hidden);
+  const cash = visible
+    .filter((a) => a.account_type === "depository")
+    .reduce((s, a) => s + (a.current_balance ?? 0), 0);
+  const debt = visible
+    .filter((a) => ["credit", "loan"].includes(a.account_type))
+    .reduce((s, a) => s + (a.current_balance ?? 0), 0);
 
   return (
     <>
@@ -29,6 +40,29 @@ export default function Dashboard() {
             label={`Research LLM (${setup.data?.llm_provider ?? "none"})`}
             ok={!!setup.data?.llm_configured}
           />
+        </Card>
+
+        <Card title="Balances">
+          {visible.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              No linked accounts. <Link className="underline" to="/accounts">Link one →</Link>
+            </p>
+          ) : (
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span>Cash (checking + savings)</span>
+                <span className="font-semibold">{money(cash)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Card & loan balances</span>
+                <span className="font-semibold text-red-500">{money(debt)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-[var(--border)] pt-1.5">
+                <span>Net</span>
+                <span className="font-semibold">{money(cash - debt)}</span>
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card title="People">
@@ -50,13 +84,13 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-5">
-        <Banner tone="info">
-          Accounts aren't linked yet. Plaid Link and SnapTrade connection flows
-          arrive in the next milestones; for now you can manage credentials and
-          people under <strong>Settings</strong>.
-        </Banner>
-      </div>
+      {visible.length === 0 && (
+        <div className="mt-5">
+          <Banner tone="info">
+            Head to <strong>Accounts</strong> to link your bank and cards through Plaid.
+          </Banner>
+        </div>
+      )}
     </>
   );
 }

@@ -23,8 +23,12 @@ pub enum AppError {
     #[error("blocked outbound request to host {0:?} (not on the allowlist)")]
     HostNotAllowed(String),
 
-    #[error("provider {provider} error: {message}")]
-    Provider { provider: String, message: String },
+    #[error("provider {provider} error{}: {message}", .code.as_deref().map(|c| format!(" [{c}]")).unwrap_or_default())]
+    Provider {
+        provider: String,
+        code: Option<String>,
+        message: String,
+    },
 
     #[error("not found: {0}")]
     NotFound(String),
@@ -45,9 +49,14 @@ impl Serialize for AppError {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("AppError", 2)?;
+        let mut s = serializer.serialize_struct("AppError", 3)?;
         s.serialize_field("kind", self.kind())?;
         s.serialize_field("message", &self.to_string())?;
+        let code = match self {
+            AppError::Provider { code, .. } => code.clone(),
+            _ => None,
+        };
+        s.serialize_field("code", &code)?;
         s.end()
     }
 }
