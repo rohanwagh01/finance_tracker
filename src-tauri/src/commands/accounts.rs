@@ -2,12 +2,33 @@
 //! syncing, and per-account flags.
 
 use serde::Serialize;
+use sqlx::SqlitePool;
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 use crate::sync::{self, LinkedItem, SyncSummary};
+
+/// Clear every attribution field on an account's transactions and set their
+/// review status to `status`.
+async fn clear_attributions(
+    pool: &SqlitePool,
+    account_id: &str,
+    status: &str,
+) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE transactions SET review_status = ?2, owner_person_id = NULL,
+             suggested_person_id = NULL, suggestion_rule_id = NULL, updated_at = ?3
+         WHERE account_id = ?1",
+    )
+    .bind(account_id)
+    .bind(status)
+    .bind(crate::util::now())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
 
 #[derive(Serialize)]
 pub struct LinkStart {
@@ -162,26 +183,42 @@ pub async fn set_account_shared(
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("account {account_id}")));
     }
-    // Move existing charges in/out of the review inbox without disturbing
-    // decisions the user already made.
+    // Turning sharing ON routes not-yet-reviewed spending charges into the
+    // inbox. Turning it OFF preserves every existing decision — spending just
+    // stops counting them (a non-shared account's charges are all yours). The
+    // only way to clear decisions is "Reset attributions" on the account.
     if shared {
         sqlx::query(
-            "UPDATE transactions SET review_status = 'pending'
-             WHERE account_id = ?1 AND review_status = 'not_required' AND amount > 0",
+            "UPDATE transactions SET review_status = 'pending', updated_at = ?2
+             WHERE account_id = ?1 AND review_status = 'not_required'
+               AND amount > 0 AND is_transfer = 0",
         )
         .bind(&account_id)
-        .execute(&db.pool)
-        .await?;
-    } else {
-        sqlx::query(
-            "UPDATE transactions SET review_status = 'not_required'
-             WHERE account_id = ?1 AND review_status = 'pending'",
-        )
-        .bind(&account_id)
+        .bind(crate::util::now())
         .execute(&db.pool)
         .await?;
     }
     Ok(())
+}
+
+/// Clear every attribution decision on an account. Shared accounts drop back to
+/// the review inbox (`pending`); others to `not_required`.
+#[tauri::command]
+pub async fn reset_account_attributions(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> AppResult<()> {
+    let db = state.db().await?;
+    let is_shared: Option<bool> =
+        sqlx::query_scalar("SELECT is_shared FROM accounts WHERE id = ?1")
+            .bind(&account_id)
+            .fetch_optional(&db.pool)
+            .await?;
+    let Some(is_shared) = is_shared else {
+        return Err(AppError::NotFound(format!("account {account_id}")));
+    };
+    let status = if is_shared { "pending" } else { "not_required" };
+    clear_attributions(&db.pool, &account_id, status).await
 }
 
 #[tauri::command]
@@ -201,4 +238,29 @@ pub async fn set_account_hidden(
         return Err(AppError::NotFound(format!("account {account_id}")));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Db;
+    use crate::util::now;
+
+    #[tokio::test]
+    async fn clear_attributions_wipes_owner_and_suggestion() {
+        let db = Db::connect_in_memory().await.unwrap();
+        let p = &db.pool;
+        let ts = now();
+        sqlx::query("INSERT INTO items (id,provider,secret_ref,status,created_at,updated_at) VALUES ('i','plaid','x','active',?1,?1)").bind(&ts).execute(p).await.unwrap();
+        sqlx::query("INSERT INTO accounts (id,item_id,provider_account_id,name,type,currency,is_shared,created_at,updated_at) VALUES ('a','i','a','Card','credit','USD',1,?1,?1)").bind(&ts).execute(p).await.unwrap();
+        sqlx::query("INSERT INTO people (id,name,is_self,created_at) VALUES ('me','Me',1,?1)").bind(&ts).execute(p).await.unwrap();
+        sqlx::query("INSERT INTO transactions (id,account_id,provider_txn_id,posted_date,amount,currency,description,category_source,pending,review_status,owner_person_id,suggested_person_id,suggestion_rule_id,is_transfer,created_at,updated_at) VALUES ('t','a','t','2026-08-01',10.0,'USD','X','provider',0,'assigned','me','me','r1',0,?1,?1)").bind(&ts).execute(p).await.unwrap();
+
+        clear_attributions(p, "a", "pending").await.unwrap();
+
+        let row: (String, Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT review_status, owner_person_id, suggested_person_id, suggestion_rule_id FROM transactions WHERE id='t'",
+        ).fetch_one(p).await.unwrap();
+        assert_eq!(row, ("pending".into(), None, None, None));
+    }
 }

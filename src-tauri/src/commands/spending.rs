@@ -59,11 +59,14 @@ async fn person_is_self(pool: &SqlitePool, f: &SpendingFilter) -> AppResult<bool
 }
 
 fn push_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter, person_self: bool) {
+    // Attribution (owner / excluded) only counts on accounts that are still
+    // marked shared. On a non-shared account every charge is the primary
+    // person's, regardless of any decision stored from when it was shared.
     qb.push(" WHERE t.amount > 0 AND t.is_transfer = 0 AND a.is_hidden = 0 ");
     if f.excluded() {
-        qb.push(" AND t.review_status = 'excluded' ");
+        qb.push(" AND a.is_shared = 1 AND t.review_status = 'excluded' ");
     } else {
-        qb.push(" AND t.review_status != 'excluded' ");
+        qb.push(" AND NOT (a.is_shared = 1 AND t.review_status = 'excluded') ");
     }
     qb.push(format!(
         " AND COALESCE(p.id, c.id, '') NOT IN ({EXCLUDED_PRIMARY}) "
@@ -81,11 +84,12 @@ fn push_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter, person_self: bo
     if !f.excluded() {
         if let Some(pid) = &f.person_id {
             if person_self {
-                qb.push(" AND (t.owner_person_id = ")
+                qb.push(" AND (a.is_shared = 0 OR t.owner_person_id = ")
                     .push_bind(pid.clone())
                     .push(" OR t.review_status = 'not_required') ");
             } else {
-                qb.push(" AND t.owner_person_id = ").push_bind(pid.clone());
+                qb.push(" AND a.is_shared = 1 AND t.owner_person_id = ")
+                    .push_bind(pid.clone());
             }
         }
     }
@@ -177,9 +181,9 @@ pub async fn spending_by_person(
     let f = SpendingFilter { person_id: None, excluded_only: None, ..filter };
 
     let mut qb = QueryBuilder::<Sqlite>::new(
-        "SELECT COALESCE(t.owner_person_id, self.id) AS person_id,
-                COALESCE(own.name, self.name) AS person_name,
-                COALESCE(own.is_self, self.is_self) AS is_self,
+        "SELECT CASE WHEN a.is_shared = 1 THEN COALESCE(t.owner_person_id, self.id) ELSE self.id END AS person_id,
+                CASE WHEN a.is_shared = 1 THEN COALESCE(own.name, self.name) ELSE self.name END AS person_name,
+                CASE WHEN a.is_shared = 1 THEN COALESCE(own.is_self, self.is_self) ELSE self.is_self END AS is_self,
                 COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count
          FROM transactions t
          JOIN accounts a ON a.id = t.account_id
@@ -189,7 +193,7 @@ pub async fn spending_by_person(
          CROSS JOIN (SELECT id, name, is_self FROM people WHERE is_self = 1 ORDER BY created_at LIMIT 1) self",
     );
     push_where(&mut qb, &f, false);
-    qb.push(" AND (t.owner_person_id IS NOT NULL OR t.review_status = 'not_required')");
+    qb.push(" AND (a.is_shared = 0 OR t.owner_person_id IS NOT NULL OR t.review_status = 'not_required')");
     qb.push(" GROUP BY 1, 2, 3 ORDER BY total DESC");
     Ok(qb.build_query_as().fetch_all(&db.pool).await?)
 }
@@ -366,6 +370,48 @@ pub async fn list_transactions(
     transactions(&state.db().await?.pool, &filter, &opts.unwrap_or_default()).await
 }
 
+/// Every transaction for one account (any date, inflows included) with its
+/// attribution — for the account detail view.
+#[tauri::command]
+pub async fn account_transactions(
+    state: State<'_, AppState>,
+    account_id: String,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> AppResult<TxnPage> {
+    let db = state.db().await?;
+    let limit = limit.unwrap_or(100).clamp(1, 500);
+    let offset = offset.unwrap_or(0).max(0);
+
+    let total_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM transactions WHERE account_id = ?1")
+            .bind(&account_id)
+            .fetch_one(&db.pool)
+            .await?;
+
+    let rows: Vec<TxnRow> = sqlx::query_as::<_, TxnRow>(
+        "SELECT t.id, t.posted_date, t.amount, t.currency, t.description, t.merchant_name,
+                t.category_id, COALESCE(c.label, p.label) AS category_label,
+                a.name AS account_name, a.is_shared AS account_is_shared,
+                t.review_status, t.owner_person_id, op.name AS owner_person_name, t.pending
+         FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         LEFT JOIN categories p ON p.id = c.parent_id
+         LEFT JOIN people op ON op.id = t.owner_person_id
+         WHERE t.account_id = ?1
+         ORDER BY t.posted_date DESC, t.amount DESC
+         LIMIT ?2 OFFSET ?3",
+    )
+    .bind(&account_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&db.pool)
+    .await?;
+
+    Ok(TxnPage { rows, total_count })
+}
+
 // --- categories / recategorize ---------------------------------------
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -431,9 +477,10 @@ mod tests {
         let p = &db.pool;
         let ts = now();
         sqlx::query("INSERT INTO items (id, provider, secret_ref, status, created_at, updated_at) VALUES ('it','plaid','x','active',?1,?1)").bind(&ts).execute(p).await.unwrap();
-        for (id, hidden) in [("acard", 0), ("achk", 0), ("ahid", 1)] {
-            sqlx::query("INSERT INTO accounts (id,item_id,provider_account_id,name,type,currency,is_hidden,created_at,updated_at) VALUES (?1,'it',?1,?1,'depository','USD',?2,?3,?3)")
-                .bind(id).bind(hidden).bind(&ts).execute(p).await.unwrap();
+        // acard is a shared card (attribution applies); achk/ahid are not.
+        for (id, hidden, shared) in [("acard", 0, 1), ("achk", 0, 0), ("ahid", 1, 0)] {
+            sqlx::query("INSERT INTO accounts (id,item_id,provider_account_id,name,type,currency,is_hidden,is_shared,created_at,updated_at) VALUES (?1,'it',?1,?1,'depository','USD',?2,?3,?4,?4)")
+                .bind(id).bind(hidden).bind(shared).bind(&ts).execute(p).await.unwrap();
         }
         // detail categories under FOOD_AND_DRINK / GENERAL_MERCHANDISE
         for (id, parent) in [

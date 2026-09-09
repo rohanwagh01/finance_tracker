@@ -55,6 +55,14 @@ export const api = {
     invoke<void>("set_account_shared", { accountId, shared }),
   setAccountHidden: (accountId: string, hidden: boolean) =>
     invoke<void>("set_account_hidden", { accountId, hidden }),
+  resetAccountAttributions: (accountId: string) =>
+    invoke<void>("reset_account_attributions", { accountId }),
+  accountTransactions: (accountId: string, limit?: number, offset?: number) =>
+    invoke<TxnPage>("account_transactions", {
+      accountId,
+      limit: limit ?? null,
+      offset: offset ?? null,
+    }),
 
   spendingSummary: (filter: SpendingFilter) =>
     invoke<SpendingSummary>("spending_summary", { filter }),

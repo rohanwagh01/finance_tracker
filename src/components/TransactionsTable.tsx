@@ -146,30 +146,34 @@ export default function TransactionsTable({
                   </select>
                 </td>
                 <td className="py-1.5 pr-3">
-                  <select
-                    value={ownerValue(t)}
-                    onChange={(e) =>
-                      e.target.value &&
-                      reassign.mutate({ id: t.id, value: e.target.value })
-                    }
-                    className="rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs"
-                  >
-                    {t.review_status === "pending" && (
-                      <option value="" disabled>
-                        Unreviewed
-                      </option>
-                    )}
-                    <option value="__mine__">Mine</option>
-                    {others.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                    <option value="__exclude__">Excluded</option>
-                    {t.review_status !== "pending" && (
-                      <option value="__reset__">-reset-</option>
-                    )}
-                  </select>
+                  {!t.account_is_shared ? (
+                    <span className="text-xs text-[var(--muted)]">Not shared</span>
+                  ) : (
+                    <select
+                      value={ownerValue(t)}
+                      onChange={(e) =>
+                        e.target.value &&
+                        reassign.mutate({ id: t.id, value: e.target.value })
+                      }
+                      className="rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs"
+                    >
+                      {t.review_status === "pending" && (
+                        <option value="" disabled>
+                          Unreviewed
+                        </option>
+                      )}
+                      <option value="__mine__">Mine</option>
+                      {others.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                      <option value="__exclude__">Excluded</option>
+                      {t.review_status !== "pending" && (
+                        <option value="__reset__">-reset-</option>
+                      )}
+                    </select>
+                  )}
                 </td>
                 <td className="py-1.5 pl-3 text-right font-medium tabular-nums">
                   {money(t.amount, t.currency)}

@@ -4,6 +4,7 @@ import { api, errorMessage } from "../lib/api";
 import type { AccountView, ItemView, SyncSummary } from "../lib/types";
 import { money, relativeTime } from "../lib/format";
 import { Banner, Button, Card, Toggle } from "../components/ui";
+import AccountDetailModal from "../components/AccountDetailModal";
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -27,9 +28,11 @@ function summaryLine(s: SyncSummary): string {
 function AccountRow({
   account,
   onChanged,
+  onOpen,
 }: {
   account: AccountView;
   onChanged: () => void;
+  onOpen: () => void;
 }) {
   const shared = useMutation({
     mutationFn: (v: boolean) => api.setAccountShared(account.id, v),
@@ -43,8 +46,8 @@ function AccountRow({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] py-3 first:border-t-0">
-      <div className="min-w-0">
-        <div className="text-sm font-medium">
+      <button className="min-w-0 text-left" onClick={onOpen}>
+        <div className="text-sm font-medium hover:underline">
           {account.name}
           {account.mask && (
             <span className="text-[var(--muted)]"> ••{account.mask}</span>
@@ -52,8 +55,9 @@ function AccountRow({
         </div>
         <div className="text-xs text-[var(--muted)] capitalize">
           {account.subtype ?? account.account_type}
+          {account.is_shared && " · shared"}
         </div>
-      </div>
+      </button>
 
       <div className="flex items-center gap-5">
         <div className="text-right">
@@ -91,10 +95,12 @@ function ItemCard({
   item,
   accounts,
   onChanged,
+  onOpenAccount,
 }: {
   item: ItemView;
   accounts: AccountView[];
   onChanged: () => void;
+  onOpenAccount: (a: AccountView) => void;
 }) {
   const [result, setResult] = useState<string | null>(null);
   const [confirmUnlink, setConfirmUnlink] = useState(false);
@@ -157,7 +163,12 @@ function ItemCard({
       )}
       <div>
         {accounts.map((a) => (
-          <AccountRow key={a.id} account={a} onChanged={onChanged} />
+          <AccountRow
+            key={a.id}
+            account={a}
+            onChanged={onChanged}
+            onOpen={() => onOpenAccount(a)}
+          />
         ))}
       </div>
     </Card>
@@ -171,10 +182,21 @@ export default function Accounts() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
 
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["items"] });
-    qc.invalidateQueries({ queryKey: ["accounts"] });
+    for (const k of [
+      "items",
+      "accounts",
+      "account-transactions",
+      "review-count",
+      "review-inbox",
+      "spending-summary",
+      "spending-by-person",
+      "transactions-table",
+    ]) {
+      qc.invalidateQueries({ queryKey: [k] });
+    }
   };
 
+  const [openAccount, setOpenAccount] = useState<AccountView | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
   const pollCount = useRef(0);
@@ -307,9 +329,20 @@ export default function Accounts() {
             item={item}
             accounts={byItem(item.id)}
             onChanged={refresh}
+            onOpenAccount={setOpenAccount}
           />
         ))}
       </div>
+
+      {openAccount && (
+        <AccountDetailModal
+          account={
+            (accounts.data ?? []).find((a) => a.id === openAccount.id) ??
+            openAccount
+          }
+          onClose={() => setOpenAccount(null)}
+        />
+      )}
     </>
   );
 }
