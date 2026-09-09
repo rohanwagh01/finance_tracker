@@ -4,6 +4,13 @@ import { api, errorMessage } from "../lib/api";
 import type { AccountView, TxnRow } from "../lib/types";
 import { money } from "../lib/format";
 import { Banner, Button, Toggle } from "./ui";
+import ValueAreaChart from "./ValueAreaChart";
+
+function twoYearsAgo() {
+  const d = new Date();
+  d.setDate(d.getDate() - 730);
+  return d.toISOString().slice(0, 10);
+}
 
 function attribution(t: TxnRow): string {
   switch (t.review_status) {
@@ -32,6 +39,15 @@ export default function AccountDetailModal({
   const txns = useQuery({
     queryKey: ["account-transactions", account.id],
     queryFn: () => api.accountTransactions(account.id, 200),
+  });
+  const hist = useQuery({
+    queryKey: ["account-value-history", account.id],
+    queryFn: () =>
+      api.accountValueHistory(
+        account.id,
+        twoYearsAgo(),
+        new Date().toISOString().slice(0, 10),
+      ),
   });
 
   const invalidateAll = () => {
@@ -137,6 +153,12 @@ export default function AccountDetailModal({
             />
           </div>
         </div>
+
+        {(hist.data?.length ?? 0) >= 2 && (
+          <div className="border-b border-[var(--border)] px-5 py-3">
+            <ValueAreaChart data={hist.data ?? []} height={140} />
+          </div>
+        )}
 
         <div className="border-b border-[var(--border)] p-5">
           {!confirmReset ? (

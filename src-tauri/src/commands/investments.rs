@@ -256,6 +256,36 @@ pub async fn portfolio_history(
     history(&state.db().await?.pool, &from, &to).await
 }
 
+/// Value over time for one account, carrying the last known snapshot forward
+/// over days it wasn't synced.
+#[tauri::command]
+pub async fn account_value_history(
+    state: State<'_, AppState>,
+    account_id: String,
+    from: String,
+    to: String,
+) -> AppResult<Vec<HistoryPoint>> {
+    let db = state.db().await?;
+    Ok(sqlx::query_as::<_, HistoryPoint>(
+        "WITH days AS (
+             SELECT DISTINCT snapshot_date AS d FROM value_snapshots
+             WHERE scope = 'account' AND account_id = ?1
+               AND snapshot_date >= ?2 AND snapshot_date <= ?3
+         )
+         SELECT days.d AS date,
+                (SELECT vs.value FROM value_snapshots vs
+                 WHERE vs.account_id = ?1 AND vs.scope = 'account'
+                   AND vs.snapshot_date <= days.d
+                 ORDER BY vs.snapshot_date DESC LIMIT 1) AS value
+         FROM days ORDER BY days.d",
+    )
+    .bind(&account_id)
+    .bind(&from)
+    .bind(&to)
+    .fetch_all(&db.pool)
+    .await?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

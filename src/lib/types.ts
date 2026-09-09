@@ -229,6 +229,24 @@ export interface HistoryPoint {
   value: number;
 }
 
+export interface TrendSeries {
+  id: string;
+  label: string;
+  values: number[];
+}
+
+export interface SpendingTrends {
+  months: string[];
+  series: TrendSeries[];
+}
+
+export interface NetWorthNow {
+  cash: number;
+  investments: number;
+  debt: number;
+  net: number;
+}
+
 export interface Person {
   id: string;
   name: string;

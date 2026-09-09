@@ -10,6 +10,7 @@ import type {
   Settings,
   SetupStatus,
   HistoryPoint,
+  NetWorthNow,
   PersonSpend,
   Portfolio,
   ReviewRow,
@@ -17,6 +18,7 @@ import type {
   RuleView,
   SpendingFilter,
   SpendingSummary,
+  SpendingTrends,
   SyncSummary,
   TxnOpts,
   TxnPage,
@@ -72,6 +74,13 @@ export const api = {
 
   spendingSummary: (filter: SpendingFilter) =>
     invoke<SpendingSummary>("spending_summary", { filter }),
+  spendingTrends: (filter: SpendingFilter) =>
+    invoke<SpendingTrends>("spending_trends", { filter }),
+  netWorthHistory: (from: string, to: string) =>
+    invoke<HistoryPoint[]>("net_worth_history", { from, to }),
+  netWorthNow: () => invoke<NetWorthNow>("net_worth_now"),
+  accountValueHistory: (accountId: string, from: string, to: string) =>
+    invoke<HistoryPoint[]>("account_value_history", { accountId, from, to }),
   spendingChildren: (filter: SpendingFilter, categoryId: string) =>
     invoke<ChildRow[]>("spending_children", { filter, categoryId }),
   listTransactions: (filter: SpendingFilter, opts?: TxnOpts) =>

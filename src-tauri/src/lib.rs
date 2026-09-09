@@ -64,6 +64,7 @@ pub fn run() {
             commands::accounts::set_account_hidden,
             commands::accounts::reset_account_attributions,
             commands::spending::spending_summary,
+            commands::spending::spending_trends,
             commands::spending::spending_by_person,
             commands::spending::spending_children,
             commands::spending::list_transactions,
@@ -81,6 +82,9 @@ pub fn run() {
             commands::review::apply_rules_now,
             commands::investments::portfolio,
             commands::investments::portfolio_history,
+            commands::investments::account_value_history,
+            commands::networth::net_worth_history,
+            commands::networth::net_worth_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -158,6 +158,111 @@ pub async fn spending_summary(
     summary(&state.db().await?.pool, &filter).await
 }
 
+// --- monthly trends by category -------------------------------------
+
+#[derive(Serialize)]
+pub struct SpendingTrends {
+    pub months: Vec<String>,
+    /// One entry per category (top N by total, plus a rolled-up "Other"),
+    /// each carrying a value for every month in `months` (same order).
+    pub series: Vec<TrendSeries>,
+}
+
+#[derive(Serialize)]
+pub struct TrendSeries {
+    pub id: String,
+    pub label: String,
+    pub values: Vec<f64>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MonthCat {
+    month: String,
+    cat_id: String,
+    label: String,
+    total: f64,
+}
+
+pub async fn trends(pool: &SqlitePool, filter: &SpendingFilter) -> AppResult<SpendingTrends> {
+    const TOP_N: usize = 6;
+    let ps = person_is_self(pool, filter).await?;
+
+    let mut qb = QueryBuilder::<Sqlite>::new(
+        "SELECT strftime('%Y-%m', t.posted_date) AS month,
+                COALESCE(p.id, c.id, 'UNCATEGORIZED') AS cat_id,
+                COALESCE(p.label, c.label, 'Uncategorized') AS label,
+                COALESCE(SUM(t.amount), 0.0) AS total",
+    );
+    qb.push(FROM_CLAUSE);
+    push_where(&mut qb, filter, ps);
+    qb.push(" GROUP BY 1, 2, 3");
+    let rows: Vec<MonthCat> = qb.build_query_as().fetch_all(pool).await?;
+
+    // ordered unique months
+    let mut months: Vec<String> = rows.iter().map(|r| r.month.clone()).collect();
+    months.sort();
+    months.dedup();
+    let month_idx: std::collections::HashMap<&str, usize> =
+        months.iter().enumerate().map(|(i, m)| (m.as_str(), i)).collect();
+
+    // category totals to pick the top N
+    let mut cat_total: std::collections::HashMap<String, (String, f64)> = Default::default();
+    for r in &rows {
+        let e = cat_total.entry(r.cat_id.clone()).or_insert((r.label.clone(), 0.0));
+        e.1 += r.total;
+    }
+    let mut ranked: Vec<(String, String, f64)> = cat_total
+        .into_iter()
+        .map(|(id, (label, tot))| (id, label, tot))
+        .collect();
+    ranked.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let top: std::collections::HashSet<String> =
+        ranked.iter().take(TOP_N).map(|r| r.0.clone()).collect();
+
+    let mut series: std::collections::HashMap<String, TrendSeries> = Default::default();
+    for (id, label, _) in ranked.iter().take(TOP_N) {
+        series.insert(
+            id.clone(),
+            TrendSeries { id: id.clone(), label: label.clone(), values: vec![0.0; months.len()] },
+        );
+    }
+    let has_other = ranked.len() > TOP_N;
+    if has_other {
+        series.insert(
+            "OTHER".into(),
+            TrendSeries { id: "OTHER".into(), label: "Other".into(), values: vec![0.0; months.len()] },
+        );
+    }
+
+    for r in &rows {
+        let Some(&mi) = month_idx.get(r.month.as_str()) else { continue };
+        let key = if top.contains(&r.cat_id) { r.cat_id.as_str() } else { "OTHER" };
+        if let Some(s) = series.get_mut(key) {
+            s.values[mi] += r.total;
+        }
+    }
+
+    // return in ranked order, Other last
+    let mut out: Vec<TrendSeries> = ranked
+        .iter()
+        .take(TOP_N)
+        .filter_map(|(id, _, _)| series.remove(id))
+        .collect();
+    if let Some(o) = series.remove("OTHER") {
+        out.push(o);
+    }
+
+    Ok(SpendingTrends { months, series: out })
+}
+
+#[tauri::command]
+pub async fn spending_trends(
+    state: State<'_, AppState>,
+    filter: SpendingFilter,
+) -> AppResult<SpendingTrends> {
+    trends(&state.db().await?.pool, &filter).await
+}
+
 // --- per person -------------------------------------------------------
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -582,6 +687,30 @@ mod tests {
         let page = transactions(&db.pool, &f, &TxnOpts::default()).await.unwrap();
         assert_eq!(page.total_count, 1);
         assert_eq!(page.rows[0].review_status, "excluded");
+    }
+
+    #[tokio::test]
+    async fn trends_pivots_months_x_categories() {
+        let db = seed().await;
+        let p = &db.pool;
+        let ts = now();
+        // add a July restaurant charge so we have two months
+        sqlx::query("INSERT INTO transactions (id,account_id,provider_txn_id,posted_date,amount,currency,description,category_id,category_source,pending,review_status,is_transfer,created_at,updated_at) VALUES ('j1','achk','j1','2026-07-10',30.0,'USD','Cafe','FOOD_AND_DRINK_RESTAURANT','provider',0,'not_required',0,?1,?1)")
+            .bind(&ts).execute(p).await.unwrap();
+
+        let f = SpendingFilter {
+            from: "2026-07-01".into(),
+            to: "2026-08-31".into(),
+            account_ids: None,
+            person_id: None,
+            excluded_only: None,
+        };
+        let t = trends(p, &f).await.unwrap();
+        assert_eq!(t.months, vec!["2026-07", "2026-08"]);
+        let food = t.series.iter().find(|s| s.id == "FOOD_AND_DRINK").unwrap();
+        assert_eq!(food.values.len(), 2);
+        assert_eq!(food.values[0], 30.0); // July: j1
+        assert_eq!(food.values[1], 100.0); // Aug: t1 40 + t2 60
     }
 
     #[tokio::test]

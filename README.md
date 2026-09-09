@@ -81,4 +81,10 @@ npm run build                   # type-check + bundle the frontend
   with allocation. A **"pull history since"** date in Settings sets the Plaid
   transaction window (up to Plaid's ~2-year max).
 
-Next: over-time charts (6), net worth page (7), research (8).
+- **Milestone 6** — over-time charts from the daily `value_snapshots`: net-worth
+  history on the Dashboard, portfolio value on Investments, a per-account value
+  chart in the account detail modal, and a **"By category"** stacked view on the
+  Spending monthly chart. History carries the last snapshot forward over
+  un-synced days.
+
+Next: net worth page (7), research (8), packaging (9).

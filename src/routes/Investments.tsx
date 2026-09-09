@@ -1,19 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { api, errorMessage } from "../lib/api";
 import { money, relativeTime } from "../lib/format";
 import { Banner, Button, Card } from "../components/ui";
 import HoldingsTable from "../components/HoldingsTable";
+import ValueAreaChart from "../components/ValueAreaChart";
 
 function twoYearsAgo() {
   const d = new Date();
@@ -111,56 +103,13 @@ export default function Investments() {
             />
           </div>
 
-          {(hist.data?.length ?? 0) >= 2 && (
-            <Card title="Value over time">
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={hist.data}>
-                    <defs>
-                      <linearGradient id="pv" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11, fill: "var(--muted)" }}
-                      stroke="var(--border)"
-                      minTickGap={40}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: "var(--muted)" }}
-                      stroke="var(--border)"
-                      width={60}
-                      domain={["auto", "auto"]}
-                      tickFormatter={(v) => money(Number(v))}
-                    />
-                    <Tooltip
-                      formatter={(v) => money(Number(v))}
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--accent)"
-                      strokeWidth={2}
-                      fill="url(#pv)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                Built from each sync — Plaid has no historical prices, so this
-                starts when you first synced and grows over time.
-              </p>
-            </Card>
-          )}
+          <Card title="Value over time">
+            <ValueAreaChart data={hist.data ?? []} height={200} />
+            <p className="mt-1 text-xs text-[var(--muted)]">
+              Built from each sync — Plaid has no historical prices, so this
+              starts when you first synced and grows over time.
+            </p>
+          </Card>
 
           <Card
             title={

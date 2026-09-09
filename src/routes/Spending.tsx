@@ -16,6 +16,7 @@ import { Banner, Card } from "../components/ui";
 import RangePicker, { type Range } from "../components/RangePicker";
 import ExpandableBreakdown from "../components/ExpandableBreakdown";
 import TransactionsTable from "../components/TransactionsTable";
+import CategoryTrendChart from "../components/CategoryTrendChart";
 
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -32,6 +33,7 @@ export default function Spending() {
   const [range, setRange] = useState<Range | null>(null);
   const [accountIds, setAccountIds] = useState<string[]>([]);
   const [personId, setPersonId] = useState<string>("");
+  const [chart, setChart] = useState<"total" | "category">("total");
 
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
   const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople });
@@ -51,6 +53,18 @@ export default function Spending() {
     enabled: !!filter && !personId && !isExcluded && (people.data?.length ?? 0) > 1,
     queryKey: ["spending-by-person", filter?.from, filter?.to, accountIds.join(",")],
     queryFn: () => api.spendingByPerson(filter!),
+  });
+
+  const trends = useQuery({
+    enabled: !!filter && chart === "category",
+    queryKey: [
+      "spending-trends",
+      filter?.from,
+      filter?.to,
+      accountIds.join(","),
+      personId,
+    ],
+    queryFn: () => api.spendingTrends(filter!),
   });
 
   const summary = useQuery({
@@ -216,44 +230,68 @@ export default function Spending() {
           )}
 
           {summary.data.by_month.length > 0 && (
-            <Card title="Monthly spending">
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={summary.data.by_month}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--border)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 11, fill: "var(--muted)" }}
-                      stroke="var(--border)"
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: "var(--muted)" }}
-                      stroke="var(--border)"
-                      width={54}
-                      tickFormatter={(v) => money(Number(v))}
-                    />
-                    <Tooltip
-                      formatter={(v) => money(Number(v))}
-                      contentStyle={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar
-                      dataKey="total"
-                      fill="var(--accent)"
-                      radius={[3, 3, 0, 0]}
-                      maxBarSize={44}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            <Card
+              title={
+                <div className="flex gap-1.5">
+                  {(["total", "category"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => setChart(v)}
+                      className={`rounded-md px-2 py-1 text-xs ${
+                        chart === v
+                          ? "bg-[var(--accent)] text-white"
+                          : "text-[var(--muted)]"
+                      }`}
+                    >
+                      {v === "total" ? "Monthly total" : "By category"}
+                    </button>
+                  ))}
+                </div>
+              }
+            >
+              {chart === "total" ? (
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={summary.data.by_month}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 11, fill: "var(--muted)" }}
+                        stroke="var(--border)"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: "var(--muted)" }}
+                        stroke="var(--border)"
+                        width={54}
+                        tickFormatter={(v) => money(Number(v))}
+                      />
+                      <Tooltip
+                        formatter={(v) => money(Number(v))}
+                        contentStyle={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                      />
+                      <Bar
+                        dataKey="total"
+                        fill="var(--accent)"
+                        radius={[3, 3, 0, 0]}
+                        maxBarSize={44}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : trends.data ? (
+                <CategoryTrendChart trends={trends.data} />
+              ) : (
+                <p className="py-8 text-center text-xs text-[var(--muted)]">Loading…</p>
+              )}
             </Card>
           )}
 
