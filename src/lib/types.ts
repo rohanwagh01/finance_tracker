@@ -25,6 +25,7 @@ export interface Settings {
   ollama_model: string;
   news_provider: "finnhub" | "marketaux" | "none";
   auto_confirm_high_confidence: boolean;
+  research_share_gains: boolean;
 }
 
 export interface ItemView {
@@ -322,6 +323,56 @@ export interface RecurringInput {
 export interface RecurringSummary {
   monthly_expense: number;
   monthly_income: number;
+}
+
+export interface SafeHolding {
+  ticker: string;
+  allocation_pct: number;
+  sector?: string | null;
+  gain_pct?: number | null;
+}
+
+export interface SafePortfolioContext {
+  holdings: SafeHolding[];
+  watchlist: string[];
+}
+
+export interface NewsItem {
+  ticker: string;
+  headline: string;
+  summary: string;
+  source: string;
+  url: string;
+  published_at: string;
+}
+
+export interface HoldingNote {
+  ticker: string;
+  note: string;
+}
+
+export interface ResearchIdea {
+  ticker: string;
+  name: string;
+  rationale: string;
+}
+
+export interface ResearchAnalysis {
+  summary: string;
+  concentration_risk: string;
+  per_holding: HoldingNote[];
+  ideas: ResearchIdea[];
+}
+
+export interface ResearchReport {
+  id: string;
+  created_at: string;
+  provider: string;
+  model: string;
+  prompt?: string | null;
+  context: SafePortfolioContext;
+  news: NewsItem[];
+  analysis: ResearchAnalysis;
 }
 
 export interface Person {

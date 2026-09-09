@@ -100,6 +100,14 @@ pub fn run() {
             commands::recurring::update_recurring,
             commands::recurring::delete_recurring,
             commands::recurring::detect_recurring,
+            commands::research::research_watchlist,
+            commands::research::research_watchlist_add,
+            commands::research::research_watchlist_remove,
+            commands::research::research_safe_context,
+            commands::research::research_news,
+            commands::research::research_run,
+            commands::research::research_followup,
+            commands::research::research_latest,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

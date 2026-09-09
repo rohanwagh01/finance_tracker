@@ -4,6 +4,7 @@ pub mod manual;
 pub mod networth;
 pub mod people;
 pub mod recurring;
+pub mod research;
 pub mod review;
 pub mod settings;
 pub mod spending;

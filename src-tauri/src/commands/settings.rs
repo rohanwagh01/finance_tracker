@@ -36,6 +36,9 @@ pub struct Settings {
     pub ollama_model: String,
     pub news_provider: String,  // "finnhub" | "marketaux" | "none"
     pub auto_confirm_high_confidence: bool,
+    /// Opt-in: send each holding's rounded gain/loss % to the research LLM.
+    /// Still never sends dollar amounts, balances, or share counts.
+    pub research_share_gains: bool,
 }
 
 /// Default history window: the Plaid maximum, ~24 months.
@@ -58,6 +61,7 @@ impl Default for Settings {
             ollama_model: "llama3.1".into(),
             news_provider: "finnhub".into(),
             auto_confirm_high_confidence: false,
+            research_share_gains: false,
         }
     }
 }
@@ -112,6 +116,10 @@ async fn load_settings(state: &AppState) -> AppResult<Settings> {
         news_provider: state.config_get_or("news_provider", &d.news_provider).await?,
         auto_confirm_high_confidence: state
             .config_get_or("auto_confirm_high_confidence", "false")
+            .await?
+            == "true",
+        research_share_gains: state
+            .config_get_or("research_share_gains", "false")
             .await?
             == "true",
     })
@@ -199,6 +207,11 @@ pub async fn update_settings(state: State<'_, AppState>, settings: Settings) -> 
     s.config_set(
         "auto_confirm_high_confidence",
         if settings.auto_confirm_high_confidence { "true" } else { "false" },
+    )
+    .await?;
+    s.config_set(
+        "research_share_gains",
+        if settings.research_share_gains { "true" } else { "false" },
     )
     .await?;
     Ok(())

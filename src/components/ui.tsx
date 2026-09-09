@@ -3,6 +3,46 @@ import type {
   InputHTMLAttributes,
   ReactNode,
 } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
+/** An external link that opens in the user's real browser (not the webview). */
+export function ExtLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => openUrl(href)}
+      className="text-[var(--accent)] underline"
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Collapsible "how do I get this?" panel for setup steps. */
+export function Help({
+  title = "How do I get this?",
+  children,
+}: {
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="rounded-lg border border-[var(--border)] bg-[var(--bg)]">
+      <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-[var(--muted)] marker:content-none hover:text-[var(--fg)] [&::-webkit-details-marker]:hidden">
+        {title}
+      </summary>
+      <div className="space-y-2 border-t border-[var(--border)] px-3 py-3 text-xs leading-relaxed text-[var(--muted)]">
+        {children}
+      </div>
+    </details>
+  );
+}
 
 export function Card({
   title,

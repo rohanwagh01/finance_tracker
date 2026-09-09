@@ -12,8 +12,7 @@ use crate::error::{AppError, AppResult};
 /// Domains the app is permitted to talk to, and why.
 /// A host matches if it equals an entry or is a subdomain of one.
 const ALLOWED_DOMAINS: &[&str] = &[
-    "plaid.com",        // bank / card aggregation (read-only)
-    "snaptrade.com",    // brokerage aggregation (read-only)
+    "plaid.com",        // bank / card / investment aggregation (read-only)
     "anthropic.com",    // research LLM (tickers + allocation % only)
     "finnhub.io",       // market news + earnings calendar
     "marketaux.com",    // market news (fallback)
@@ -87,7 +86,6 @@ mod tests {
         for h in [
             "sandbox.plaid.com",
             "production.plaid.com",
-            "api.snaptrade.com",
             "api.anthropic.com",
             "finnhub.io",
             "api.marketaux.com",
@@ -105,6 +103,7 @@ mod tests {
             "plaid.com.evil.com",
             "notplaid.com",
             "api.openai.com",
+            "api.snaptrade.com",
             "example.org",
             "10.0.0.5",
         ] {

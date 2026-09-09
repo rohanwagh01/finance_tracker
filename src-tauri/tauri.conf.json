@@ -26,12 +26,24 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Finance",
+    "shortDescription": "Local, read-only personal finance tracker",
+    "longDescription": "A private, offline-first desktop app for tracking spending, investments and net worth. All data is encrypted at rest behind a master password; the only network access is read-only account aggregation and optional market research.",
+    "copyright": "Copyright © 2026 Rohan Wagh",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

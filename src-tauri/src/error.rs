@@ -3,6 +3,26 @@
 
 use serde::{Serialize, Serializer};
 
+/// reqwest's own `Display` is terse ("error sending request for url (...)"); the
+/// useful part (dns error, connection refused, timed out, TLS failure) lives in
+/// the source chain. Flatten it so the frontend surfaces something actionable.
+fn format_reqwest(e: &reqwest::Error) -> String {
+    let mut msg = e.to_string();
+    let mut source = std::error::Error::source(e);
+    while let Some(inner) = source {
+        let s = inner.to_string();
+        if !msg.contains(&s) {
+            msg.push_str(": ");
+            msg.push_str(&s);
+        }
+        source = inner.source();
+    }
+    if e.is_timeout() && !msg.contains("timed out") {
+        msg.push_str(" (timed out)");
+    }
+    msg
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("database error: {0}")]
@@ -11,7 +31,7 @@ pub enum AppError {
     #[error("migration error: {0}")]
     Migrate(#[from] sqlx::migrate::MigrateError),
 
-    #[error("network error: {0}")]
+    #[error("network error: {}", format_reqwest(.0))]
     Http(#[from] reqwest::Error),
 
     #[error("serialization error: {0}")]

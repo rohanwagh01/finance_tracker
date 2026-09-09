@@ -20,8 +20,11 @@ import type {
   HistoryPoint,
   NetWorthNow,
   PersonSpend,
+  NewsItem,
   Portfolio,
+  ResearchReport,
   ReviewRow,
+  SafePortfolioContext,
   RuleInput,
   RuleView,
   SpendingFilter,
@@ -141,6 +144,20 @@ export const api = {
     invoke<void>("update_rule", { id, input }),
   deleteRule: (id: string) => invoke<void>("delete_rule", { id }),
   applyRulesNow: () => invoke<number>("apply_rules_now"),
+
+  researchWatchlist: () => invoke<string[]>("research_watchlist"),
+  researchWatchlistAdd: (ticker: string) =>
+    invoke<void>("research_watchlist_add", { ticker }),
+  researchWatchlistRemove: (ticker: string) =>
+    invoke<void>("research_watchlist_remove", { ticker }),
+  researchSafeContext: () =>
+    invoke<SafePortfolioContext>("research_safe_context"),
+  researchNews: (refresh?: boolean) =>
+    invoke<NewsItem[]>("research_news", { refresh: refresh ?? null }),
+  researchRun: () => invoke<ResearchReport>("research_run"),
+  researchFollowup: (question: string) =>
+    invoke<ResearchReport>("research_followup", { question }),
+  researchLatest: () => invoke<ResearchReport | null>("research_latest"),
 
   listPeople: () => invoke<Person[]>("list_people"),
   createPerson: (input: { name: string; color?: string | null }) =>

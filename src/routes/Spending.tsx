@@ -171,7 +171,18 @@ export default function Spending() {
         <Banner tone="error">Could not load spending.</Banner>
       )}
 
-      {summary.data && (
+      {summary.data && summary.data.txn_count === 0 && (
+        <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] p-10 text-center">
+          <h2 className="text-base font-semibold">No spending in this range yet</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">
+            Link your bank and cards on the <strong>Accounts</strong> page and run
+            a sync. Transactions will show up here once Plaid has them — widen the
+            date range if you just linked.
+          </p>
+        </div>
+      )}
+
+      {summary.data && summary.data.txn_count > 0 && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <Kpi

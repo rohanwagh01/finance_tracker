@@ -18,6 +18,14 @@ body {
   color: var(--fg);
 }
 
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+}
+
 :root {
   --bg: #f6f7f9;
   --fg: #1a1d21;

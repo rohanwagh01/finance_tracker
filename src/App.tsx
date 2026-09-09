@@ -1,16 +1,19 @@
+import { lazy, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "./lib/api";
 import Onboarding from "./routes/Onboarding";
 import Vault from "./routes/Vault";
 import Dashboard from "./routes/Dashboard";
-import Accounts from "./routes/Accounts";
-import Spending from "./routes/Spending";
-import Review from "./routes/Review";
-import Investments from "./routes/Investments";
-import NetWorth from "./routes/NetWorth";
-import Research from "./routes/Research";
-import SettingsPage from "./routes/Settings";
+
+// Secondary routes are code-split so the initial bundle stays small.
+const Accounts = lazy(() => import("./routes/Accounts"));
+const Spending = lazy(() => import("./routes/Spending"));
+const Review = lazy(() => import("./routes/Review"));
+const Investments = lazy(() => import("./routes/Investments"));
+const NetWorth = lazy(() => import("./routes/NetWorth"));
+const Research = lazy(() => import("./routes/Research"));
+const SettingsPage = lazy(() => import("./routes/Settings"));
 
 const NAV = [
   { to: "/", label: "Dashboard", end: true },
@@ -113,17 +116,25 @@ function AppShell() {
 
       <main className="overflow-y-auto p-8">
         <div className="mx-auto max-w-5xl">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/accounts" element={<Accounts />} />
-            <Route path="/spending" element={<Spending />} />
-            <Route path="/review" element={<Review />} />
-            <Route path="/investments" element={<Investments />} />
-            <Route path="/net-worth" element={<NetWorth />} />
-            <Route path="/research" element={<Research />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <div className="pt-10 text-center text-sm text-[var(--muted)]">
+                Loading…
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/accounts" element={<Accounts />} />
+              <Route path="/spending" element={<Spending />} />
+              <Route path="/review" element={<Review />} />
+              <Route path="/investments" element={<Investments />} />
+              <Route path="/net-worth" element={<NetWorth />} />
+              <Route path="/research" element={<Research />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
     </div>

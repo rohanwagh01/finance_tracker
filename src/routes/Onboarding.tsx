@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { api, errorMessage } from "../lib/api";
 import type { Settings } from "../lib/types";
-import { Banner, Button, Select, TextField } from "../components/ui";
+import {
+  Banner,
+  Button,
+  ExtLink,
+  Help,
+  Select,
+  TextField,
+} from "../components/ui";
 
 type Props = { onDone: () => void };
 
@@ -38,6 +45,7 @@ export default function Onboarding({ onDone }: Props) {
     ollama_model: "llama3.1",
     news_provider: "finnhub",
     auto_confirm_high_confidence: false,
+    research_share_gains: false,
     ...over,
   });
 
@@ -120,8 +128,10 @@ export default function Onboarding({ onDone }: Props) {
             and transaction amounts never leave your computer.
           </p>
           <p className="text-sm text-[var(--muted)]">
-            You'll need a Plaid account (the free Trial plan works). The research
-            LLM is optional and can be added later in Settings.
+            You'll need a free Plaid account. The research LLM and news feed are
+            optional and can be added later in Settings. Each step has a{" "}
+            <strong>"How do I get this?"</strong> section you can expand for
+            click-by-click instructions.
           </p>
           <Button onClick={next}>Get started</Button>
         </div>
@@ -131,8 +141,45 @@ export default function Onboarding({ onDone }: Props) {
         <div className="space-y-4">
           <h1 className="text-xl font-semibold">Connect Plaid</h1>
           <p className="text-sm text-[var(--muted)]">
-            From the Plaid Dashboard → Developers → Keys.
+            Plaid is the read-only bridge to your banks and cards. The free plan
+            is enough and no card is required to start.
           </p>
+
+          <Help title="Step-by-step: get your Plaid keys (~3 min)">
+            <ol className="list-decimal space-y-1.5 pl-4">
+              <li>
+                Go to{" "}
+                <ExtLink href="https://dashboard.plaid.com/signup">
+                  dashboard.plaid.com/signup
+                </ExtLink>{" "}
+                and create a free account. Pick "Personal" use if asked.
+              </li>
+              <li>
+                Verify your email, then open{" "}
+                <ExtLink href="https://dashboard.plaid.com/developers/keys">
+                  Developers → Keys
+                </ExtLink>
+                .
+              </li>
+              <li>
+                Copy the <strong>client_id</strong> into the first field below.
+              </li>
+              <li>
+                Start with <strong>Sandbox</strong>: copy the{" "}
+                <em>Sandbox</em> secret and leave Environment on "Sandbox". You
+                can try the whole app with fake data — at the bank login screen
+                use username <code>user_good</code> / password{" "}
+                <code>pass_good</code>.
+              </li>
+              <li>
+                When you're ready for real accounts, switch Environment to{" "}
+                <strong>Production</strong> here and paste the{" "}
+                <em>Production</em> secret instead. Production access is
+                self-serve for personal use (up to 100 linked institutions).
+              </li>
+            </ol>
+          </Help>
+
           <TextField
             label="Client ID"
             value={plaidId}
@@ -180,32 +227,126 @@ export default function Onboarding({ onDone }: Props) {
       {step === 2 && (
         <div className="space-y-4">
           <h1 className="text-xl font-semibold">Research (optional)</h1>
+          <p className="text-sm text-[var(--muted)]">
+            Adds a market-news feed and an LLM that comments on your holdings.
+            Only ticker symbols and rounded allocation percentages are ever sent —
+            never balances or amounts. You can skip this and add it later in
+            Settings.
+          </p>
+
           <Select label="LLM provider" value={llm} onChange={setLlm}>
             <option value="none">None</option>
             <option value="anthropic">Claude API</option>
             <option value="ollama">Ollama (local, nothing leaves machine)</option>
           </Select>
+
+          <Help title="Which should I pick?">
+            <ul className="list-disc space-y-1.5 pl-4">
+              <li>
+                <strong>Claude API</strong> — best answers, works on any machine.
+                Needs an account with a payment method; a research run costs a few
+                cents.
+              </li>
+              <li>
+                <strong>Ollama</strong> — free and fully local (nothing leaves
+                your computer), but needs a reasonably powerful machine and a
+                one-time model download.
+              </li>
+              <li>
+                <strong>None</strong> — skip the LLM. The news feed still works
+                with just a Finnhub key.
+              </li>
+            </ul>
+          </Help>
+
           {llm === "anthropic" && (
-            <TextField
-              label="Anthropic API key"
-              type="password"
-              value={anthropicKey}
-              onChange={(e) => setAnthropicKey(e.target.value)}
-            />
+            <>
+              <TextField
+                label="Anthropic API key"
+                type="password"
+                value={anthropicKey}
+                onChange={(e) => setAnthropicKey(e.target.value)}
+              />
+              <Help title="Step-by-step: get an Anthropic API key">
+                <ol className="list-decimal space-y-1.5 pl-4">
+                  <li>
+                    Sign up at{" "}
+                    <ExtLink href="https://console.anthropic.com/">
+                      console.anthropic.com
+                    </ExtLink>
+                    .
+                  </li>
+                  <li>
+                    Open <strong>Billing</strong> and add a small amount of
+                    credit (e.g. $5).
+                  </li>
+                  <li>
+                    Open <strong>API Keys → Create Key</strong>, copy it, and
+                    paste it above. It starts with <code>sk-ant-</code>.
+                  </li>
+                </ol>
+              </Help>
+            </>
           )}
+
           {llm === "ollama" && (
-            <TextField
-              label="Ollama URL"
-              value={ollamaUrl}
-              onChange={(e) => setOllamaUrl(e.target.value)}
-            />
+            <>
+              <TextField
+                label="Ollama URL"
+                value={ollamaUrl}
+                onChange={(e) => setOllamaUrl(e.target.value)}
+              />
+              <Help title="Step-by-step: set up Ollama">
+                <ol className="list-decimal space-y-1.5 pl-4">
+                  <li>
+                    Download and install it from{" "}
+                    <ExtLink href="https://ollama.com/download">
+                      ollama.com/download
+                    </ExtLink>{" "}
+                    and open it once so it's running.
+                  </li>
+                  <li>
+                    In a terminal, run <code>ollama pull llama3.1</code> (about
+                    5&nbsp;GB). A bigger model like <code>ollama pull qwen2.5:14b</code>{" "}
+                    gives better answers if your machine can handle it.
+                  </li>
+                  <li>
+                    Leave the URL below as{" "}
+                    <code>http://localhost:11434</code> unless you changed it.
+                  </li>
+                  <li>
+                    If you pulled a different model, set its name in{" "}
+                    <strong>Settings</strong> after onboarding.
+                  </li>
+                </ol>
+              </Help>
+            </>
           )}
+
           <TextField
             label="Finnhub API key (market news, optional)"
             type="password"
             value={finnhubKey}
             onChange={(e) => setFinnhubKey(e.target.value)}
           />
+          <Help title="Step-by-step: get a free Finnhub key (~1 min)">
+            <ol className="list-decimal space-y-1.5 pl-4">
+              <li>
+                Register at{" "}
+                <ExtLink href="https://finnhub.io/register">
+                  finnhub.io/register
+                </ExtLink>{" "}
+                with an email address — no card needed.
+              </li>
+              <li>
+                Your API key is shown on the dashboard right after you log in.
+                Copy it above.
+              </li>
+              <li>
+                The free tier covers the per-company news this app uses.
+              </li>
+            </ol>
+          </Help>
           {error && <Banner tone="error">{error}</Banner>}
           <div className="flex justify-between pt-2">
             <Button variant="ghost" onClick={back}>

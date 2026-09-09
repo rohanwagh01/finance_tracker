@@ -250,6 +250,21 @@ export default function SettingsPage() {
                 <option value="marketaux">Marketaux</option>
                 <option value="none">None</option>
               </Select>
+
+              <div className="pt-1">
+                <Toggle
+                  label="Let the research LLM see gain/loss %"
+                  checked={form.research_share_gains}
+                  onChange={(v) =>
+                    setForm({ ...form, research_share_gains: v })
+                  }
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Adds each holding's rounded gain/loss percent vs. cost basis to
+                  what's sent for analysis. Still never sends dollar amounts,
+                  balances, or share counts.
+                </p>
+              </div>
             </div>
 
             <div className="mt-4">

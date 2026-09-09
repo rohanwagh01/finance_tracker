@@ -14,42 +14,60 @@ Three areas: **Spending**, **Investments** (with market research), and **Net Wor
 - **There is no password recovery.** No server can reset it. If you forget it the
   data is unrecoverable; the app offers "Reset app" which wipes the database and
   starts over.
-- The only outbound traffic is to a fixed allowlist: Plaid, SnapTrade, your chosen
-  news API, and (if enabled) the research LLM. Everything else is blocked in code
+- The only outbound traffic is to a fixed allowlist: Plaid, your chosen news API,
+  and (if enabled) the research LLM. Everything else is blocked in code
   (`src-tauri/src/http.rs`).
 - All aggregator access is **read-only** — balances, transactions, holdings.
 - The research feature sends **only tickers and rounded allocation percentages** —
   never balances, amounts, or share counts (`src-tauri/src/research/safe_context.rs`).
+  An optional setting ("Let the research LLM see gain/loss %") additionally sends
+  each holding's rounded gain/loss percent vs. cost basis; it's off by default and
+  still never sends dollar figures.
 
-## Prerequisites
+## Install
 
-- **Rust** (stable) — https://rustup.rs
-- **Node** 18+ — https://nodejs.org or `nvm install 22`
-- **Xcode Command Line Tools** (macOS): `xcode-select --install`
+**Easiest — download a build.** Grab the installer for your OS from the
+[Releases page](../../releases): `.dmg` (macOS), `.msi` (Windows), `.AppImage`
+(Linux). The builds are not code-signed, so the first launch needs one extra click:
 
-## Setup
+- **macOS**: right-click the app → **Open** → **Open** (only the first time). Or
+  run `xattr -dr com.apple.quarantine "/Applications/Finance Tracker.app"`.
+- **Windows**: "Windows protected your PC" → **More info** → **Run anyway**.
+
+**Or build from source:**
 
 ```bash
+# prerequisites: Rust (https://rustup.rs), Node 18+ , and on macOS: xcode-select --install
 npm install
-npm run tauri dev      # run in development
-npm run tauri build    # produce a .dmg / .app (or .msi / .AppImage)
+npm run tauri build    # installer lands in src-tauri/target/release/bundle/
+npm run tauri dev      # or run in development
 ```
 
+> On macOS, run `npm run tauri build` from a normal Terminal in a logged-in
+> session — the `.dmg` step drives Finder via AppleScript to lay out the window.
+> If it fails there (e.g. over SSH or in a sandbox), the `.app` in
+> `src-tauri/target/release/bundle/macos/` is still valid, and the GitHub Actions
+> release workflow builds the `.dmg` regardless.
+
+The app icon is generated from `src-tauri/icons/source-icon.svg` via
+`npm run tauri icon`.
+
 On first launch you set a **master password** (it encrypts the local database),
-then an onboarding wizard collects your API keys.
+then an onboarding wizard collects your API keys. Every step in the wizard has a
+**"How do I get this?"** section with click-by-click instructions.
 
-If you ran an earlier build that used the macOS Keychain, you can clear the old
-entries: `security delete-generic-password -s com.financetracker.app` (repeat
-until it says "not found").
+### API keys — quick reference
 
-### Getting API keys
+The wizard explains each of these in detail; this is the summary.
 
-| Service | Needed for | Notes |
+| Service | Needed for | How |
 |---|---|---|
-| **Plaid** | banks & cards | Sign up, use the free **Trial plan** (auto-approved, up to 10 items). Dashboard → Developers → Keys. |
-| **SnapTrade** | Robinhood / E*Trade holdings | Optional. Free personal-use tier. |
-| **Anthropic** or **Ollama** | research LLM | Optional. Claude API key, or run Ollama locally. |
-| **Finnhub** | market news / earnings | Optional. Free tier. |
+| **Plaid** | banks & cards (required) | Free account at [dashboard.plaid.com](https://dashboard.plaid.com/signup) → Developers → Keys. Start in **Sandbox** (fake data, log in with `user_good` / `pass_good`); switch to **Production** for real accounts (self-serve, up to 100 institutions). |
+| **Anthropic** *or* **Ollama** | research LLM (optional) | Claude: key from [console.anthropic.com](https://console.anthropic.com/) + a few $ of credit — best quality, any machine. Ollama: install from [ollama.com](https://ollama.com/download), `ollama pull llama3.1` — free and fully local, needs a capable machine. |
+| **Finnhub** | market news (optional) | Free key, shown on the dashboard right after you register at [finnhub.io/register](https://finnhub.io/register). |
+
+Each person who uses the app brings **their own** keys — there is no shared
+account or server, and one person's data is never visible to anyone else.
 
 ## Development
 
@@ -60,7 +78,7 @@ npm run build                   # type-check + bundle the frontend
 
 ## Status
 
-- **Milestone 1** — app shell, onboarding, settings, keychain credentials, SQLite
+- **Milestone 1** — app shell, onboarding, settings, credential storage, SQLite
   schema + migrations, people management, HTTP allowlist, research privacy guard.
 - **Milestone 2** — Plaid Hosted Link + polling, account/balance/transaction sync
   (cursor-based), institution linking/unlinking, per-account shared/hidden flags,
@@ -95,5 +113,21 @@ npm run build                   # type-check + bundle the frontend
   entry plus a **"Detect from transactions"** scan that clusters repeating
   merchant + amount patterns into weekly/biweekly/monthly/quarterly/yearly
   cadences, with monthly-equivalent totals.
+- **Milestone 8** — the **Research** page. A watchlist of extra tickers; a
+  "what leaves your machine" panel showing the exact outbound payload (ticker +
+  rounded allocation % only — enforced by `research::safe_context`, the single
+  path from portfolio data to any external service); per-ticker market news from
+  Finnhub or Marketaux (cached per day); and an LLM analysis run (Anthropic
+  Claude or local Ollama, both asked for strict JSON) that synthesises the
+  headlines, calls out concentration risk, and suggests companies to look at.
+  Reports are saved locally; the newest shows on load. A follow-up box lets you
+  ask questions that revise the analysis in place. An optional setting shares
+  rounded gain/loss % (never dollars). The `snaptrade.com` host was dropped from
+  the outbound allowlist.
+- **Milestone 9** — packaging & polish: app icon, richer bundle metadata,
+  a GitHub Actions release workflow (`tauri-action`, macOS/Windows/Linux
+  installers on tag), route-level code-splitting, expandable setup-wizard help,
+  and first-run empty states. Distribution: unsigned installers from GitHub
+  Releases (documented right-click-Open step), or build from source.
 
-Next: research (8), packaging (9).
+All nine milestones are complete.
