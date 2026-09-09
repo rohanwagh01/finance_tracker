@@ -73,6 +73,7 @@ export interface SpendingFilter {
   to: string;
   account_ids?: string[] | null;
   person_id?: string | null;
+  excluded_only?: boolean | null;
 }
 
 export interface MonthTotal {
@@ -112,8 +113,10 @@ export interface TxnRow {
   category_id: string | null;
   category_label: string | null;
   account_name: string;
+  account_is_shared: boolean;
   review_status: string;
   owner_person_id: string | null;
+  owner_person_name: string | null;
   pending: boolean;
 }
 
@@ -134,6 +137,58 @@ export interface CategoryRow {
   id: string;
   parent_id: string | null;
   label: string;
+}
+
+export interface ReviewRow {
+  id: string;
+  posted_date: string;
+  amount: number;
+  currency: string;
+  description: string;
+  merchant_name: string | null;
+  category_label: string | null;
+  account_id: string;
+  account_name: string;
+  suggested_person_id: string | null;
+  suggested_person_name: string | null;
+  suggestion_rule_id: string | null;
+}
+
+export interface PersonSpend {
+  person_id: string;
+  person_name: string;
+  is_self: boolean;
+  total: number;
+  count: number;
+}
+
+export interface RuleView {
+  id: string;
+  priority: number;
+  enabled: boolean;
+  match_field: string;
+  match_op: string;
+  match_value: string;
+  match_value2: string | null;
+  account_id: string | null;
+  account_name: string | null;
+  set_person_id: string | null;
+  set_person_name: string | null;
+  set_category_id: string | null;
+  high_confidence: boolean;
+}
+
+export interface RuleInput {
+  match_field: string;
+  match_op: string;
+  match_value: string;
+  match_value2?: string | null;
+  account_id?: string | null;
+  set_person_id?: string | null;
+  set_category_id?: string | null;
+  high_confidence: boolean;
+  priority?: number | null;
+  enabled?: boolean | null;
 }
 
 export interface Person {

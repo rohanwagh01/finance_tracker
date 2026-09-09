@@ -70,6 +70,11 @@ npm run build                   # type-check + bundle the frontend
 - **Milestone 3** — the **Spending** page: date-range picker, KPIs, monthly bar
   chart, expandable category → subcategory → merchant → transaction breakdown,
   and a searchable transaction table with inline recategorization.
+- **Milestone 4** — attribution: the **Review** inbox (shared-card charges you
+  Keep / Assign / Exclude, with bulk actions and a nav badge), a rules engine
+  that pre-fills the suggested person (contains / equals / regex / amount
+  comparisons, optional auto-confirm for high-confidence rules), and per-person
+  spending on the Spending page.
 
-Next: attribution review inbox (4), SnapTrade + portfolio (5), over-time charts
-(6), net worth page (7), research (8).
+Next: SnapTrade + portfolio (5), over-time charts (6), net worth page (7),
+research (8).

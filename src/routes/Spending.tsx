@@ -31,20 +31,37 @@ export default function Spending() {
   const qc = useQueryClient();
   const [range, setRange] = useState<Range | null>(null);
   const [accountIds, setAccountIds] = useState<string[]>([]);
+  const [personId, setPersonId] = useState<string>("");
 
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
+  const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople });
 
+  const isExcluded = personId === "__excluded__";
   const filter: SpendingFilter | null = range
     ? {
         from: range.from,
         to: range.to,
         account_ids: accountIds.length ? accountIds : null,
+        person_id: isExcluded ? null : personId || null,
+        excluded_only: isExcluded ? true : null,
       }
     : null;
 
+  const byPerson = useQuery({
+    enabled: !!filter && !personId && !isExcluded && (people.data?.length ?? 0) > 1,
+    queryKey: ["spending-by-person", filter?.from, filter?.to, accountIds.join(",")],
+    queryFn: () => api.spendingByPerson(filter!),
+  });
+
   const summary = useQuery({
     enabled: !!filter,
-    queryKey: ["spending-summary", filter?.from, filter?.to, accountIds.join(",")],
+    queryKey: [
+      "spending-summary",
+      filter?.from,
+      filter?.to,
+      accountIds.join(","),
+      personId,
+    ],
     queryFn: () => api.spendingSummary(filter!),
   });
 
@@ -61,17 +78,40 @@ export default function Spending() {
   }, [summary.data]);
 
   const onRecategorized = () => {
-    qc.invalidateQueries({ queryKey: ["spending-summary"] });
-    qc.invalidateQueries({ queryKey: ["spending-children"] });
-    qc.invalidateQueries({ queryKey: ["spending-txns"] });
-    qc.invalidateQueries({ queryKey: ["transactions-table"] });
+    for (const k of [
+      "spending-summary",
+      "spending-children",
+      "spending-txns",
+      "spending-by-person",
+      "transactions-table",
+      "review-count",
+      "review-inbox",
+    ]) {
+      qc.invalidateQueries({ queryKey: [k] });
+    }
   };
 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Spending</h1>
-        <RangePicker onChange={setRange} />
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={personId}
+            onChange={(e) => setPersonId(e.target.value)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs"
+          >
+            <option value="">All</option>
+            {people.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.is_self ? " (you)" : ""}
+              </option>
+            ))}
+            <option value="__excluded__">Excluded</option>
+          </select>
+          <RangePicker onChange={setRange} />
+        </div>
       </div>
 
       {(accounts.data?.length ?? 0) > 1 && (
@@ -136,6 +176,44 @@ export default function Spending() {
               }
             />
           </div>
+
+          {!personId && !isExcluded && (byPerson.data?.length ?? 0) > 1 && (
+            <Card title="By person">
+              <p className="mb-2 text-xs text-[var(--muted)]">
+                Best-effort — from the review inbox. Everything on non-shared
+                accounts counts as yours.
+              </p>
+              <div className="space-y-1.5">
+                {byPerson.data?.map((p) => {
+                  const max = Math.max(
+                    ...(byPerson.data ?? []).map((x) => x.total),
+                    1,
+                  );
+                  return (
+                    <button
+                      key={p.person_id}
+                      onClick={() => setPersonId(p.person_id)}
+                      className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-black/5 dark:hover:bg-white/5"
+                    >
+                      <span className="w-28 shrink-0 truncate text-left">
+                        {p.person_name}
+                        {p.is_self ? " (you)" : ""}
+                      </span>
+                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
+                        <span
+                          className="block h-full rounded-full bg-[var(--accent)]"
+                          style={{ width: `${(p.total / max) * 100}%` }}
+                        />
+                      </span>
+                      <span className="w-20 shrink-0 text-right font-medium">
+                        {money(p.total)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
 
           {summary.data.by_month.length > 0 && (
             <Card title="Monthly spending">

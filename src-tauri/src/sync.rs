@@ -236,6 +236,13 @@ async fn sync_item_inner(
         }
     }
 
+    // Run attribution rules over anything now sitting in the review inbox.
+    let auto_confirm = state
+        .config_get_or("auto_confirm_high_confidence", "false")
+        .await?
+        == "true";
+    crate::rules::apply_to_pending(&db.pool, auto_confirm).await?;
+
     Ok(summary)
 }
 

@@ -19,6 +19,7 @@ export default function Dashboard() {
   const setup = useQuery({ queryKey: ["setup-status"], queryFn: api.getSetupStatus });
   const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.listAccounts });
+  const reviewCount = useQuery({ queryKey: ["review-count"], queryFn: api.reviewCount });
 
   const visible = (accounts.data ?? []).filter((a) => !a.is_hidden);
   const cash = visible
@@ -83,6 +84,18 @@ export default function Dashboard() {
           </ul>
         </Card>
       </div>
+
+      {(reviewCount.data ?? 0) > 0 && (
+        <div className="mt-5">
+          <Banner tone="info">
+            <Link className="underline" to="/review">
+              {reviewCount.data} charge{reviewCount.data === 1 ? "" : "s"} waiting
+              in Review
+            </Link>{" "}
+            — decide whose spending they are.
+          </Banner>
+        </div>
+      )}
 
       {visible.length === 0 && (
         <div className="mt-5">

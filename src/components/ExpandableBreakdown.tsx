@@ -36,14 +36,15 @@ function Node({
 }) {
   const [open, setOpen] = useState(false);
 
+  const fkey = [filter.from, filter.to, filter.person_id ?? "", (filter.account_ids ?? []).join(",")];
   const children = useQuery({
     enabled: open && !leaf,
-    queryKey: ["spending-children", filter.from, filter.to, id],
+    queryKey: ["spending-children", ...fkey, id],
     queryFn: () => api.spendingChildren(filter, id),
   });
   const txns = useQuery({
     enabled: open && leaf,
-    queryKey: ["spending-txns", filter.from, filter.to, id],
+    queryKey: ["spending-txns", ...fkey, id],
     queryFn: () => api.listTransactions(filter, { merchant: id, limit: 100 }),
   });
 

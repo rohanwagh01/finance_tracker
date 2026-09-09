@@ -114,7 +114,15 @@ pub async fn delete_person(state: State<'_, AppState>, id: String) -> AppResult<
     if person.is_self {
         return Err(AppError::Invalid("cannot delete the primary person".into()));
     }
-    // Detach any transactions / rules that referenced them.
+    // Send their shared-card charges back to the review inbox; detach the rest.
+    sqlx::query(
+        "UPDATE transactions SET owner_person_id = NULL, review_status = 'pending'
+         WHERE owner_person_id = ?1
+           AND account_id IN (SELECT id FROM accounts WHERE is_shared = 1)",
+    )
+    .bind(&id)
+    .execute(&db.pool)
+    .await?;
     sqlx::query("UPDATE transactions SET owner_person_id = NULL WHERE owner_person_id = ?1")
         .bind(&id)
         .execute(&db.pool)

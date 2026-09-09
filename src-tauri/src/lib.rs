@@ -4,6 +4,7 @@ mod error;
 mod http;
 mod providers;
 mod research;
+mod rules;
 mod secrets;
 mod state;
 mod sync;
@@ -61,10 +62,20 @@ pub fn run() {
             commands::accounts::set_account_shared,
             commands::accounts::set_account_hidden,
             commands::spending::spending_summary,
+            commands::spending::spending_by_person,
             commands::spending::spending_children,
             commands::spending::list_transactions,
             commands::spending::list_categories,
             commands::spending::set_transaction_category,
+            commands::review::review_inbox,
+            commands::review::review_count,
+            commands::review::review_decide,
+            commands::review::review_reopen,
+            commands::review::list_rules,
+            commands::review::create_rule,
+            commands::review::update_rule,
+            commands::review::delete_rule,
+            commands::review::apply_rules_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

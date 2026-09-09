@@ -28,10 +28,43 @@ pub struct SpendingFilter {
     pub to: String,
     pub account_ids: Option<Vec<String>>,
     pub person_id: Option<String>,
+    /// Show only transactions the user excluded from their spending. When set,
+    /// `person_id` is ignored.
+    pub excluded_only: Option<bool>,
 }
 
-fn push_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter) {
-    qb.push(" WHERE t.amount > 0 AND t.is_transfer = 0 AND t.review_status != 'excluded' AND a.is_hidden = 0 ");
+impl SpendingFilter {
+    fn excluded(&self) -> bool {
+        self.excluded_only == Some(true)
+    }
+}
+
+/// Whether `filter.person_id` (if any) refers to the primary "self" person.
+/// The self person also owns everything that never needed review
+/// (`review_status = 'not_required'`).
+async fn person_is_self(pool: &SqlitePool, f: &SpendingFilter) -> AppResult<bool> {
+    if f.excluded() {
+        return Ok(false);
+    }
+    match &f.person_id {
+        Some(id) => Ok(
+            sqlx::query_scalar::<_, bool>("SELECT is_self FROM people WHERE id = ?1")
+                .bind(id)
+                .fetch_optional(pool)
+                .await?
+                .unwrap_or(false),
+        ),
+        None => Ok(false),
+    }
+}
+
+fn push_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter, person_self: bool) {
+    qb.push(" WHERE t.amount > 0 AND t.is_transfer = 0 AND a.is_hidden = 0 ");
+    if f.excluded() {
+        qb.push(" AND t.review_status = 'excluded' ");
+    } else {
+        qb.push(" AND t.review_status != 'excluded' ");
+    }
     qb.push(format!(
         " AND COALESCE(p.id, c.id, '') NOT IN ({EXCLUDED_PRIMARY}) "
     ));
@@ -45,8 +78,16 @@ fn push_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter) {
         }
         qb.push(")");
     }
-    if let Some(pid) = &f.person_id {
-        qb.push(" AND t.owner_person_id = ").push_bind(pid.clone());
+    if !f.excluded() {
+        if let Some(pid) = &f.person_id {
+            if person_self {
+                qb.push(" AND (t.owner_person_id = ")
+                    .push_bind(pid.clone())
+                    .push(" OR t.review_status = 'not_required') ");
+            } else {
+                qb.push(" AND t.owner_person_id = ").push_bind(pid.clone());
+            }
+        }
     }
 }
 
@@ -75,18 +116,20 @@ pub struct Bucket {
 }
 
 pub async fn summary(pool: &SqlitePool, filter: &SpendingFilter) -> AppResult<SpendingSummary> {
+    let ps = person_is_self(pool, filter).await?;
+
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count",
     );
     qb.push(FROM_CLAUSE);
-    push_where(&mut qb, filter);
+    push_where(&mut qb, filter, ps);
     let (total, txn_count): (f64, i64) = qb.build_query_as().fetch_one(pool).await?;
 
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT strftime('%Y-%m', t.posted_date) AS month, COALESCE(SUM(t.amount), 0.0) AS total",
     );
     qb.push(FROM_CLAUSE);
-    push_where(&mut qb, filter);
+    push_where(&mut qb, filter, ps);
     qb.push(" GROUP BY 1 ORDER BY 1");
     let by_month: Vec<MonthTotal> = qb.build_query_as().fetch_all(pool).await?;
 
@@ -96,7 +139,7 @@ pub async fn summary(pool: &SqlitePool, filter: &SpendingFilter) -> AppResult<Sp
                 COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count",
     );
     qb.push(FROM_CLAUSE);
-    push_where(&mut qb, filter);
+    push_where(&mut qb, filter, ps);
     qb.push(" GROUP BY 1, 2 ORDER BY 3 DESC");
     let by_category: Vec<Bucket> = qb.build_query_as().fetch_all(pool).await?;
 
@@ -109,6 +152,46 @@ pub async fn spending_summary(
     filter: SpendingFilter,
 ) -> AppResult<SpendingSummary> {
     summary(&state.db().await?.pool, &filter).await
+}
+
+// --- per person -------------------------------------------------------
+
+#[derive(Serialize, sqlx::FromRow)]
+pub struct PersonSpend {
+    pub person_id: String,
+    pub person_name: String,
+    pub is_self: bool,
+    pub total: f64,
+    pub count: i64,
+}
+
+/// Spend grouped by owner. Unowned `not_required` transactions (everything on
+/// non-shared accounts) are attributed to the primary person. `person_id` on
+/// the filter is ignored here.
+#[tauri::command]
+pub async fn spending_by_person(
+    state: State<'_, AppState>,
+    filter: SpendingFilter,
+) -> AppResult<Vec<PersonSpend>> {
+    let db = state.db().await?;
+    let f = SpendingFilter { person_id: None, excluded_only: None, ..filter };
+
+    let mut qb = QueryBuilder::<Sqlite>::new(
+        "SELECT COALESCE(t.owner_person_id, self.id) AS person_id,
+                COALESCE(own.name, self.name) AS person_name,
+                COALESCE(own.is_self, self.is_self) AS is_self,
+                COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count
+         FROM transactions t
+         JOIN accounts a ON a.id = t.account_id
+         LEFT JOIN categories c ON c.id = t.category_id
+         LEFT JOIN categories p ON p.id = c.parent_id
+         LEFT JOIN people own ON own.id = t.owner_person_id
+         CROSS JOIN (SELECT id, name, is_self FROM people WHERE is_self = 1 ORDER BY created_at LIMIT 1) self",
+    );
+    push_where(&mut qb, &f, false);
+    qb.push(" AND (t.owner_person_id IS NOT NULL OR t.review_status = 'not_required')");
+    qb.push(" GROUP BY 1, 2, 3 ORDER BY total DESC");
+    Ok(qb.build_query_as().fetch_all(&db.pool).await?)
 }
 
 // --- drill-down ----------------------------------------------------------
@@ -127,6 +210,7 @@ pub async fn children(
     filter: &SpendingFilter,
     category_id: &str,
 ) -> AppResult<Vec<ChildRow>> {
+    let ps = person_is_self(pool, filter).await?;
     let has_children = category_id != "UNCATEGORIZED"
         && sqlx::query_scalar::<_, i64>(
             "SELECT EXISTS(SELECT 1 FROM categories WHERE parent_id = ?1)",
@@ -142,7 +226,7 @@ pub async fn children(
                     COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count, 0 AS is_leaf",
         );
         qb.push(FROM_CLAUSE);
-        push_where(&mut qb, filter);
+        push_where(&mut qb, filter, ps);
         qb.push(" AND c.parent_id = ").push_bind(category_id.to_string());
         qb.push(" GROUP BY 1, 2 ORDER BY 3 DESC");
         return Ok(qb.build_query_as().fetch_all(pool).await?);
@@ -154,7 +238,7 @@ pub async fn children(
                 COALESCE(SUM(t.amount), 0.0) AS total, COUNT(*) AS count, 1 AS is_leaf",
     );
     qb.push(FROM_CLAUSE);
-    push_where(&mut qb, filter);
+    push_where(&mut qb, filter, ps);
     if category_id == "UNCATEGORIZED" {
         qb.push(" AND t.category_id IS NULL");
     } else {
@@ -205,13 +289,15 @@ pub struct TxnRow {
     pub category_id: Option<String>,
     pub category_label: Option<String>,
     pub account_name: String,
+    pub account_is_shared: bool,
     pub review_status: String,
     pub owner_person_id: Option<String>,
+    pub owner_person_name: Option<String>,
     pub pending: bool,
 }
 
-fn push_txn_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter, o: &TxnOpts) {
-    push_where(qb, f);
+fn push_txn_where(qb: &mut QueryBuilder<Sqlite>, f: &SpendingFilter, o: &TxnOpts, person_self: bool) {
+    push_where(qb, f, person_self);
     match o.category_id.as_deref() {
         Some("UNCATEGORIZED") => {
             qb.push(" AND t.category_id IS NULL");
@@ -246,19 +332,22 @@ pub async fn transactions(
 ) -> AppResult<TxnPage> {
     let limit = opts.limit.unwrap_or(50).clamp(1, 500);
     let offset = opts.offset.unwrap_or(0).max(0);
+    let ps = person_is_self(pool, filter).await?;
 
     let mut qb = QueryBuilder::<Sqlite>::new("SELECT COUNT(*)");
     qb.push(FROM_CLAUSE);
-    push_txn_where(&mut qb, filter, opts);
+    push_txn_where(&mut qb, filter, opts, ps);
     let total_count: i64 = qb.build_query_scalar().fetch_one(pool).await?;
 
     let mut qb = QueryBuilder::<Sqlite>::new(
         "SELECT t.id, t.posted_date, t.amount, t.currency, t.description, t.merchant_name,
                 t.category_id, COALESCE(c.label, p.label) AS category_label,
-                a.name AS account_name, t.review_status, t.owner_person_id, t.pending",
+                a.name AS account_name, a.is_shared AS account_is_shared,
+                t.review_status, t.owner_person_id, op.name AS owner_person_name, t.pending",
     );
     qb.push(FROM_CLAUSE);
-    push_txn_where(&mut qb, filter, opts);
+    qb.push(" LEFT JOIN people op ON op.id = t.owner_person_id ");
+    push_txn_where(&mut qb, filter, opts, ps);
     qb.push(" ORDER BY t.posted_date DESC, t.amount DESC LIMIT ")
         .push_bind(limit)
         .push(" OFFSET ")
@@ -335,7 +424,7 @@ pub async fn set_transaction_category(
 mod tests {
     use super::*;
     use crate::db::Db;
-    use crate::util::{new_id, now};
+    use crate::util::now;
 
     async fn seed() -> Db {
         let db = Db::connect_in_memory().await.unwrap();
@@ -354,7 +443,7 @@ mod tests {
         ] {
             sqlx::query("INSERT INTO categories (id,parent_id,label,is_custom) VALUES (?1,?2,?1,0)").bind(id).bind(parent).execute(p).await.unwrap();
         }
-        let mut ins = |tid: &str, acct: &str, amount: f64, cat: Option<&str>, merch: &str, transfer: i64, review: &str| {
+        let ins = |tid: &str, acct: &str, amount: f64, cat: Option<&str>, merch: &str, transfer: i64, review: &str| {
             let (tid, acct, merch, review) = (tid.to_string(), acct.to_string(), merch.to_string(), review.to_string());
             let cat = cat.map(|s| s.to_string());
             let ts = ts.clone();
@@ -378,7 +467,13 @@ mod tests {
     }
 
     fn aug() -> SpendingFilter {
-        SpendingFilter { from: "2026-08-01".into(), to: "2026-08-31".into(), account_ids: None, person_id: None }
+        SpendingFilter {
+            from: "2026-08-01".into(),
+            to: "2026-08-31".into(),
+            account_ids: None,
+            person_id: None,
+            excluded_only: None,
+        }
     }
 
     #[tokio::test]
@@ -406,6 +501,40 @@ mod tests {
         assert_eq!(restaurants[0].label, "Chipotle");
         assert!(restaurants[0].is_leaf);
         assert_eq!(restaurants[0].total, 40.0);
+    }
+
+    #[tokio::test]
+    async fn person_scope_self_includes_unassigned_others_only_owned() {
+        let db = seed().await;
+        let p = &db.pool;
+        let ts = now();
+        sqlx::query("INSERT INTO people (id,name,is_self,created_at) VALUES ('me','Me',1,?1),('pp','Partner',0,?1)").bind(&ts).execute(p).await.unwrap();
+        // t1 (40, not_required) stays self-owned implicitly; assign t2 (60) to partner
+        sqlx::query("UPDATE transactions SET owner_person_id='pp', review_status='assigned' WHERE id='t2'").execute(p).await.unwrap();
+
+        let mut f = aug();
+        f.person_id = Some("me".into());
+        let me = summary(p, &f).await.unwrap();
+        assert_eq!(me.total, 65.0); // t1 40 + t3 25 (not_required), NOT t2
+
+        f.person_id = Some("pp".into());
+        let partner = summary(p, &f).await.unwrap();
+        assert_eq!(partner.total, 60.0); // only the explicitly assigned t2
+    }
+
+    #[tokio::test]
+    async fn excluded_only_shows_just_excluded() {
+        let db = seed().await;
+        // seed() has t8 (33.0) with review_status = 'excluded'
+        let mut f = aug();
+        f.excluded_only = Some(true);
+        let s = summary(&db.pool, &f).await.unwrap();
+        assert_eq!(s.txn_count, 1);
+        assert_eq!(s.total, 33.0);
+
+        let page = transactions(&db.pool, &f, &TxnOpts::default()).await.unwrap();
+        assert_eq!(page.total_count, 1);
+        assert_eq!(page.rows[0].review_status, "excluded");
     }
 
     #[tokio::test]

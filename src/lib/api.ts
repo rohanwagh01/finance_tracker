@@ -9,6 +9,10 @@ import type {
   Person,
   Settings,
   SetupStatus,
+  PersonSpend,
+  ReviewRow,
+  RuleInput,
+  RuleView,
   SpendingFilter,
   SpendingSummary,
   SyncSummary,
@@ -61,6 +65,25 @@ export const api = {
   listCategories: () => invoke<CategoryRow[]>("list_categories"),
   setTransactionCategory: (txnId: string, categoryId: string | null) =>
     invoke<void>("set_transaction_category", { txnId, categoryId }),
+
+  spendingByPerson: (filter: SpendingFilter) =>
+    invoke<PersonSpend[]>("spending_by_person", { filter }),
+
+  reviewInbox: () => invoke<ReviewRow[]>("review_inbox"),
+  reviewCount: () => invoke<number>("review_count"),
+  reviewDecide: (input: {
+    txn_ids: string[];
+    decision: "keep" | "assign" | "exclude" | "reset";
+    person_id?: string | null;
+  }) => invoke<void>("review_decide", { input }),
+  reviewReopen: (txnIds: string[]) =>
+    invoke<void>("review_reopen", { txnIds }),
+  listRules: () => invoke<RuleView[]>("list_rules"),
+  createRule: (input: RuleInput) => invoke<string>("create_rule", { input }),
+  updateRule: (id: string, input: RuleInput) =>
+    invoke<void>("update_rule", { id, input }),
+  deleteRule: (id: string) => invoke<void>("delete_rule", { id }),
+  applyRulesNow: () => invoke<number>("apply_rules_now"),
 
   listPeople: () => invoke<Person[]>("list_people"),
   createPerson: (input: { name: string; color?: string | null }) =>

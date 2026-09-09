@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "../lib/api";
-import type { SpendingFilter } from "../lib/types";
+import type { SpendingFilter, TxnRow } from "../lib/types";
 import { money } from "../lib/format";
 import { Button } from "./ui";
 
@@ -27,6 +27,7 @@ export default function TransactionsTable({
   }, [search]);
 
   const cats = useQuery({ queryKey: ["categories"], queryFn: api.listCategories });
+  const people = useQuery({ queryKey: ["people"], queryFn: api.listPeople });
 
   const q = useQuery({
     queryKey: [
@@ -34,6 +35,8 @@ export default function TransactionsTable({
       filter.from,
       filter.to,
       filter.account_ids?.join(",") ?? "",
+      filter.person_id ?? "",
+      filter.excluded_only ? "excluded" : "",
       debounced,
       page,
     ],
@@ -45,14 +48,44 @@ export default function TransactionsTable({
       }),
   });
 
+  const bump = () => {
+    q.refetch();
+    onRecategorized();
+  };
+
   const recategorize = useMutation({
     mutationFn: (v: { id: string; categoryId: string | null }) =>
       api.setTransactionCategory(v.id, v.categoryId),
-    onSuccess: () => {
-      q.refetch();
-      onRecategorized();
-    },
+    onSuccess: bump,
   });
+
+  const self = people.data?.find((p) => p.is_self);
+  const others = (people.data ?? []).filter((p) => !p.is_self);
+
+  const reassign = useMutation({
+    mutationFn: (v: { id: string; value: string }) => {
+      if (v.value === "__mine__")
+        return api.reviewDecide({ txn_ids: [v.id], decision: "keep" });
+      if (v.value === "__exclude__")
+        return api.reviewDecide({ txn_ids: [v.id], decision: "exclude" });
+      if (v.value === "__reset__")
+        return api.reviewDecide({ txn_ids: [v.id], decision: "reset" });
+      return api.reviewDecide({
+        txn_ids: [v.id],
+        decision: "assign",
+        person_id: v.value,
+      });
+    },
+    onSuccess: bump,
+  });
+
+  const ownerValue = (t: TxnRow) => {
+    if (t.review_status === "excluded") return "__exclude__";
+    if (t.review_status === "pending") return "";
+    if (t.owner_person_id)
+      return t.owner_person_id === self?.id ? "__mine__" : t.owner_person_id;
+    return "__mine__"; // not_required
+  };
 
   const total = q.data?.total_count ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -74,6 +107,7 @@ export default function TransactionsTable({
               <th className="py-1.5 pr-3 font-medium">Description</th>
               <th className="py-1.5 pr-3 font-medium">Account</th>
               <th className="py-1.5 pr-3 font-medium">Category</th>
+              <th className="py-1.5 pr-3 font-medium">Whose</th>
               <th className="py-1.5 pl-3 text-right font-medium">Amount</th>
             </tr>
           </thead>
@@ -83,7 +117,7 @@ export default function TransactionsTable({
                 <td className="py-1.5 pr-3 tabular-nums text-[var(--muted)]">
                   {t.posted_date}
                 </td>
-                <td className="max-w-[220px] truncate py-1.5 pr-3">
+                <td className="max-w-[200px] truncate py-1.5 pr-3">
                   {t.merchant_name || t.description}
                   {t.pending && (
                     <span className="text-[var(--muted)]"> · pending</span>
@@ -101,7 +135,7 @@ export default function TransactionsTable({
                         categoryId: e.target.value || null,
                       })
                     }
-                    className="max-w-[160px] rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs"
+                    className="max-w-[150px] rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs"
                   >
                     <option value="">Uncategorized</option>
                     {(cats.data ?? []).map((c) => (
@@ -109,6 +143,32 @@ export default function TransactionsTable({
                         {c.parent_id ? `  ${c.label}` : c.label}
                       </option>
                     ))}
+                  </select>
+                </td>
+                <td className="py-1.5 pr-3">
+                  <select
+                    value={ownerValue(t)}
+                    onChange={(e) =>
+                      e.target.value &&
+                      reassign.mutate({ id: t.id, value: e.target.value })
+                    }
+                    className="rounded border border-[var(--border)] bg-[var(--bg)] px-1.5 py-1 text-xs"
+                  >
+                    {t.review_status === "pending" && (
+                      <option value="" disabled>
+                        Unreviewed
+                      </option>
+                    )}
+                    <option value="__mine__">Mine</option>
+                    {others.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                    <option value="__exclude__">Excluded</option>
+                    {t.review_status !== "pending" && (
+                      <option value="__reset__">-reset-</option>
+                    )}
                   </select>
                 </td>
                 <td className="py-1.5 pl-3 text-right font-medium tabular-nums">
@@ -123,9 +183,9 @@ export default function TransactionsTable({
       {q.data && q.data.rows.length === 0 && (
         <p className="py-4 text-sm text-[var(--muted)]">No transactions.</p>
       )}
-      {recategorize.isError && (
+      {(recategorize.isError || reassign.isError) && (
         <p className="mt-2 text-xs text-red-500">
-          {errorMessage(recategorize.error)}
+          {errorMessage(recategorize.error ?? reassign.error)}
         </p>
       )}
 

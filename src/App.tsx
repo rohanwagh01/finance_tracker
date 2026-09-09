@@ -6,6 +6,7 @@ import Vault from "./routes/Vault";
 import Dashboard from "./routes/Dashboard";
 import Accounts from "./routes/Accounts";
 import Spending from "./routes/Spending";
+import Review from "./routes/Review";
 import Investments from "./routes/Investments";
 import NetWorth from "./routes/NetWorth";
 import Research from "./routes/Research";
@@ -15,6 +16,7 @@ const NAV = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/accounts", label: "Accounts" },
   { to: "/spending", label: "Spending" },
+  { to: "/review", label: "Review", badge: true },
   { to: "/investments", label: "Investments" },
   { to: "/net-worth", label: "Net Worth" },
   { to: "/research", label: "Research" },
@@ -54,6 +56,11 @@ function AppShell() {
     queryKey: ["setup-status"],
     queryFn: api.getSetupStatus,
   });
+  const reviewCount = useQuery({
+    queryKey: ["review-count"],
+    queryFn: api.reviewCount,
+    refetchInterval: 30_000,
+  });
 
   if (setup.isLoading) {
     return (
@@ -87,14 +94,19 @@ function AppShell() {
             to={n.to}
             end={n.end}
             className={({ isActive }) =>
-              `rounded-lg px-3 py-2 text-sm transition ${
+              `flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
                 isActive
                   ? "bg-[var(--accent)] text-white"
                   : "text-[var(--fg)] hover:bg-black/5 dark:hover:bg-white/5"
               }`
             }
           >
-            {n.label}
+            <span>{n.label}</span>
+            {n.badge && (reviewCount.data ?? 0) > 0 && (
+              <span className="rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">
+                {reviewCount.data}
+              </span>
+            )}
           </NavLink>
         ))}
       </aside>
@@ -105,6 +117,7 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/spending" element={<Spending />} />
+            <Route path="/review" element={<Review />} />
             <Route path="/investments" element={<Investments />} />
             <Route path="/net-worth" element={<NetWorth />} />
             <Route path="/research" element={<Research />} />
