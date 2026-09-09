@@ -8,31 +8,37 @@ mod secrets;
 mod state;
 mod sync;
 mod util;
+mod vault;
 
 use tauri::Manager;
 
-use crate::db::Db;
-use crate::state::AppState;
+use crate::state::{AppState, VaultPaths};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("resolve app data dir");
+            let data_dir = app.path().app_data_dir().expect("resolve app data dir");
             std::fs::create_dir_all(&data_dir).ok();
-            let db_path = data_dir.join("finance_tracker.sqlite3");
 
-            let db = tauri::async_runtime::block_on(Db::connect(&db_path))
-                .expect("open database and run migrations");
-
-            app.manage(AppState::new(db));
+            // The database is opened lazily by `vault_unlock` / `vault_initialize`
+            // once the master password is known — nothing private is readable
+            // before that.
+            let paths = VaultPaths {
+                meta: data_dir.join("vault.meta"),
+                db: data_dir.join("vault.db"),
+            };
+            app.manage(AppState::new(paths));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::vault::vault_status,
+            commands::vault::vault_initialize,
+            commands::vault::vault_unlock,
+            commands::vault::vault_lock,
+            commands::vault::vault_change_password,
+            commands::vault::vault_reset,
             commands::settings::get_setup_status,
             commands::settings::list_credentials,
             commands::settings::save_credential,
@@ -54,6 +60,11 @@ pub fn run() {
             commands::accounts::unlink_item,
             commands::accounts::set_account_shared,
             commands::accounts::set_account_hidden,
+            commands::spending::spending_summary,
+            commands::spending::spending_children,
+            commands::spending::list_transactions,
+            commands::spending::list_categories,
+            commands::spending::set_transaction_category,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

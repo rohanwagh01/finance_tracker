@@ -1,3 +1,9 @@
+export type VaultState = "uninitialized" | "locked" | "unlocked";
+
+export interface VaultStatus {
+  state: VaultState;
+}
+
 export interface SetupStatus {
   onboarding_complete: boolean;
   plaid_configured: boolean;
@@ -60,6 +66,74 @@ export interface SyncSummary {
   transactions_modified: number;
   transactions_removed: number;
   transactions_pending: boolean;
+}
+
+export interface SpendingFilter {
+  from: string;
+  to: string;
+  account_ids?: string[] | null;
+  person_id?: string | null;
+}
+
+export interface MonthTotal {
+  month: string;
+  total: number;
+}
+
+export interface Bucket {
+  id: string;
+  label: string;
+  total: number;
+  count: number;
+}
+
+export interface SpendingSummary {
+  total: number;
+  txn_count: number;
+  by_month: MonthTotal[];
+  by_category: Bucket[];
+}
+
+export interface ChildRow {
+  id: string;
+  label: string;
+  total: number;
+  count: number;
+  is_leaf: boolean;
+}
+
+export interface TxnRow {
+  id: string;
+  posted_date: string;
+  amount: number;
+  currency: string;
+  description: string;
+  merchant_name: string | null;
+  category_id: string | null;
+  category_label: string | null;
+  account_name: string;
+  review_status: string;
+  owner_person_id: string | null;
+  pending: boolean;
+}
+
+export interface TxnPage {
+  rows: TxnRow[];
+  total_count: number;
+}
+
+export interface TxnOpts {
+  category_id?: string | null;
+  merchant?: string | null;
+  search?: string | null;
+  limit?: number | null;
+  offset?: number | null;
+}
+
+export interface CategoryRow {
+  id: string;
+  parent_id: string | null;
+  label: string;
 }
 
 export interface Person {

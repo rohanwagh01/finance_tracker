@@ -25,7 +25,8 @@ pub struct PersonInput {
 
 #[tauri::command]
 pub async fn list_people(state: State<'_, AppState>) -> AppResult<Vec<Person>> {
-    let pool = &state.db.pool;
+    let db = state.db().await?;
+    let pool = &db.pool;
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM people")
         .fetch_one(pool)
         .await?;
@@ -55,6 +56,7 @@ pub async fn create_person(state: State<'_, AppState>, input: PersonInput) -> Ap
     if name.is_empty() {
         return Err(AppError::Invalid("name is required".into()));
     }
+    let db = state.db().await?;
     let id = new_id();
     sqlx::query(
         "INSERT INTO people (id, name, is_self, color, created_at) VALUES (?1, ?2, 0, ?3, ?4)",
@@ -63,13 +65,13 @@ pub async fn create_person(state: State<'_, AppState>, input: PersonInput) -> Ap
     .bind(name)
     .bind(input.color.as_deref())
     .bind(now())
-    .execute(&state.db.pool)
+    .execute(&db.pool)
     .await?;
     sqlx::query_as::<_, Person>(
         "SELECT id, name, is_self, color, created_at FROM people WHERE id = ?1",
     )
     .bind(&id)
-    .fetch_one(&state.db.pool)
+    .fetch_one(&db.pool)
     .await
     .map_err(Into::into)
 }
@@ -84,11 +86,12 @@ pub async fn update_person(
     if name.is_empty() {
         return Err(AppError::Invalid("name is required".into()));
     }
+    let db = state.db().await?;
     let res = sqlx::query("UPDATE people SET name = ?2, color = ?3 WHERE id = ?1")
         .bind(&id)
         .bind(name)
         .bind(input.color.as_deref())
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("person {id}")));
@@ -98,11 +101,12 @@ pub async fn update_person(
 
 #[tauri::command]
 pub async fn delete_person(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    let db = state.db().await?;
     let person: Option<Person> = sqlx::query_as::<_, Person>(
         "SELECT id, name, is_self, color, created_at FROM people WHERE id = ?1",
     )
     .bind(&id)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&db.pool)
     .await?;
     let Some(person) = person else {
         return Err(AppError::NotFound(format!("person {id}")));
@@ -113,19 +117,19 @@ pub async fn delete_person(state: State<'_, AppState>, id: String) -> AppResult<
     // Detach any transactions / rules that referenced them.
     sqlx::query("UPDATE transactions SET owner_person_id = NULL WHERE owner_person_id = ?1")
         .bind(&id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     sqlx::query("UPDATE transactions SET suggested_person_id = NULL WHERE suggested_person_id = ?1")
         .bind(&id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     sqlx::query("DELETE FROM rules WHERE set_person_id = ?1")
         .bind(&id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     sqlx::query("DELETE FROM people WHERE id = ?1")
         .bind(&id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     Ok(())
 }

@@ -268,7 +268,7 @@ export default function Onboarding({ onDone }: Props) {
         <div className="space-y-4">
           <h1 className="text-xl font-semibold">You're set</h1>
           <p className="text-sm text-[var(--muted)]">
-            Credentials are stored in your keychain. Next milestones add the Plaid
+            Credentials are stored inside the encrypted database. Next milestones add the Plaid
             Link and SnapTrade connection flows so you can link accounts.
           </p>
           {error && <Banner tone="error">{error}</Banner>}

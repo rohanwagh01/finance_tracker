@@ -1,18 +1,12 @@
-//! Secret storage. Every API credential and per-item access token is kept in a
-//! SINGLE OS-keychain entry holding a JSON map, loaded once per process and
-//! cached in memory. This keeps macOS keychain prompts to (at most) one per app
-//! launch instead of one per credential — which matters a lot under `tauri dev`,
-//! where each rebuild invalidates the keychain ACL.
+//! API credentials and per-item access tokens. These live in a `secrets` table
+//! *inside* the SQLCipher-encrypted database — so they're covered by the same
+//! master-password encryption as everything else, with no OS keychain and no
+//! separate file.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-
-use keyring::Entry;
+use sqlx::SqlitePool;
 
 use crate::error::{AppError, AppResult};
-
-const SERVICE: &str = "com.financetracker.app";
-const VAULT_ACCOUNT: &str = "vault";
+use crate::util::now;
 
 /// Well-known credential names. Per-item access tokens use `item.<uuid>`.
 pub mod keys {
@@ -40,109 +34,83 @@ pub fn item_key(item_id: &str) -> String {
     format!("item.{item_id}")
 }
 
-#[derive(Default)]
-struct Vault {
-    loaded: bool,
-    map: HashMap<String, String>,
-}
-
 #[derive(Clone)]
 pub struct SecretStore {
-    inner: Arc<Mutex<Vault>>,
-}
-
-impl Default for SecretStore {
-    fn default() -> Self {
-        Self::new()
-    }
+    pool: SqlitePool,
 }
 
 impl SecretStore {
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(Vault::default())),
-        }
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
     }
 
-    fn entry() -> AppResult<Entry> {
-        Ok(Entry::new(SERVICE, VAULT_ACCOUNT)?)
+    pub async fn get(&self, name: &str) -> AppResult<Option<String>> {
+        Ok(
+            sqlx::query_scalar("SELECT value FROM secrets WHERE name = ?1")
+                .bind(name)
+                .fetch_optional(&self.pool)
+                .await?,
+        )
     }
 
-    /// Load the vault JSON from the keychain the first time it's touched.
-    fn ensure_loaded(&self, v: &mut Vault) -> AppResult<()> {
-        if v.loaded {
-            return Ok(());
-        }
-        match Self::entry()?.get_password() {
-            Ok(json) => {
-                v.map = serde_json::from_str(&json).unwrap_or_default();
-            }
-            Err(keyring::Error::NoEntry) => {}
-            Err(e) => return Err(e.into()),
-        }
-        v.loaded = true;
-        Ok(())
-    }
-
-    /// Pull a value out of a pre-vault per-key keychain entry (written by an
-    /// earlier version) and fold it into the vault. Returns the value if found.
-    fn migrate_legacy(v: &mut Vault, name: &str) -> AppResult<Option<String>> {
-        let Ok(legacy) = Entry::new(SERVICE, name) else {
-            return Ok(None);
-        };
-        match legacy.get_password() {
-            Ok(val) => {
-                v.map.insert(name.to_string(), val.clone());
-                let _ = legacy.delete_credential();
-                Self::persist(v)?;
-                Ok(Some(val))
-            }
-            Err(_) => Ok(None),
-        }
-    }
-
-    fn persist(v: &Vault) -> AppResult<()> {
-        let json = serde_json::to_string(&v.map)?;
-        Self::entry()?.set_password(&json)?;
-        Ok(())
-    }
-
-    pub fn set(&self, name: &str, value: &str) -> AppResult<()> {
-        if value.is_empty() {
-            return Err(AppError::Invalid("secret value must not be empty".into()));
-        }
-        let mut v = self.inner.lock().unwrap();
-        self.ensure_loaded(&mut v)?;
-        v.map.insert(name.to_string(), value.to_string());
-        Self::persist(&v)
-    }
-
-    pub fn get(&self, name: &str) -> AppResult<Option<String>> {
-        let mut v = self.inner.lock().unwrap();
-        self.ensure_loaded(&mut v)?;
-        if let Some(val) = v.map.get(name) {
-            return Ok(Some(val.clone()));
-        }
-        // Fall back to a legacy per-key entry (covers `item.*` tokens and any
-        // credential written before the vault existed).
-        Self::migrate_legacy(&mut v, name)
-    }
-
-    pub fn require(&self, name: &str) -> AppResult<String> {
-        self.get(name)?
+    pub async fn require(&self, name: &str) -> AppResult<String> {
+        self.get(name)
+            .await?
             .ok_or_else(|| AppError::Config(format!("missing credential: {name}")))
     }
 
-    pub fn exists(&self, name: &str) -> AppResult<bool> {
-        Ok(self.get(name)?.is_some())
+    pub async fn exists(&self, name: &str) -> AppResult<bool> {
+        Ok(self.get(name).await?.is_some())
     }
 
-    pub fn delete(&self, name: &str) -> AppResult<()> {
-        let mut v = self.inner.lock().unwrap();
-        self.ensure_loaded(&mut v)?;
-        if v.map.remove(name).is_some() {
-            Self::persist(&v)?;
+    pub async fn set(&self, name: &str, value: &str) -> AppResult<()> {
+        if value.is_empty() {
+            return Err(AppError::Invalid("secret value must not be empty".into()));
         }
+        sqlx::query(
+            "INSERT INTO secrets (name, value, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        )
+        .bind(name)
+        .bind(value)
+        .bind(now())
+        .execute(&self.pool)
+        .await?;
         Ok(())
+    }
+
+    pub async fn delete(&self, name: &str) -> AppResult<()> {
+        sqlx::query("DELETE FROM secrets WHERE name = ?1")
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Db;
+
+    #[tokio::test]
+    async fn round_trips_secrets() {
+        let db = Db::connect_in_memory().await.unwrap();
+        let s = SecretStore::new(db.pool.clone());
+
+        assert!(!s.exists("plaid.client_id").await.unwrap());
+        assert!(s.require("plaid.client_id").await.is_err());
+
+        s.set("plaid.client_id", "abc123").await.unwrap();
+        assert_eq!(s.get("plaid.client_id").await.unwrap().as_deref(), Some("abc123"));
+        assert!(s.exists("plaid.client_id").await.unwrap());
+
+        s.set("plaid.client_id", "def456").await.unwrap();
+        assert_eq!(s.require("plaid.client_id").await.unwrap(), "def456");
+
+        s.delete("plaid.client_id").await.unwrap();
+        assert!(!s.exists("plaid.client_id").await.unwrap());
+
+        assert!(s.set("x", "").await.is_err());
     }
 }

@@ -41,7 +41,8 @@ pub async fn plaid_user_id(state: &AppState) -> AppResult<String> {
 
 pub async fn plaid_client(state: &AppState) -> AppResult<PlaidClient> {
     let env = state.plaid_env().await?;
-    PlaidClient::from_secrets(state.http.clone(), &state.secrets, env)
+    let secrets = state.secrets().await?;
+    PlaidClient::from_secrets(state.http.clone(), &secrets, env).await
 }
 
 // --- link completion ---------------------------------------------------------
@@ -53,13 +54,14 @@ pub async fn process_public_token(
     plaid: &PlaidClient,
     public_token: &str,
 ) -> AppResult<Option<LinkedItem>> {
+    let db = state.db().await?;
     let (access_token, provider_item_id) = plaid.exchange_public_token(public_token).await?;
 
     let dupe: Option<(String,)> = sqlx::query_as(
         "SELECT id FROM items WHERE provider = 'plaid' AND provider_item_id = ?1",
     )
     .bind(&provider_item_id)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&db.pool)
     .await?;
     if dupe.is_some() {
         return Ok(None);
@@ -74,7 +76,7 @@ pub async fn process_public_token(
 
     let item_id = new_id();
     let secret_ref = item_key(&item_id);
-    state.secrets.set(&secret_ref, &access_token)?;
+    state.secrets().await?.set(&secret_ref, &access_token).await?;
 
     let ts = now();
     sqlx::query(
@@ -89,11 +91,11 @@ pub async fn process_public_token(
     .bind(&institution_name)
     .bind(&secret_ref)
     .bind(&ts)
-    .execute(&state.db.pool)
+    .execute(&db.pool)
     .await?;
 
     let accounts = plaid.accounts_get(&access_token).await?;
-    let added = upsert_accounts(&state.db.pool, &item_id, &accounts).await?;
+    let added = upsert_accounts(&db.pool, &item_id, &accounts).await?;
 
     Ok(Some(LinkedItem {
         item_id,
@@ -105,6 +107,7 @@ pub async fn process_public_token(
 // --- sync ------------------------------------------------------------------
 
 pub async fn sync_item(state: &AppState, item_id: &str) -> AppResult<SyncSummary> {
+    let db = state.db().await?;
     let plaid = plaid_client(state).await?;
     let access_token = access_token_for(state, item_id).await?;
 
@@ -115,7 +118,7 @@ pub async fn sync_item(state: &AppState, item_id: &str) -> AppResult<SyncSummary
     .bind(&log_id)
     .bind(item_id)
     .bind(now())
-    .execute(&state.db.pool)
+    .execute(&db.pool)
     .await?;
 
     let result = sync_item_inner(state, &plaid, item_id, &access_token).await;
@@ -131,12 +134,12 @@ pub async fn sync_item(state: &AppState, item_id: &str) -> AppResult<SyncSummary
                 "+{} ~{} -{}",
                 s.transactions_added, s.transactions_modified, s.transactions_removed
             ))
-            .execute(&state.db.pool)
+            .execute(&db.pool)
             .await?;
             sqlx::query("UPDATE items SET last_synced_at = ?2, status = 'active', error_message = NULL WHERE id = ?1")
                 .bind(item_id)
                 .bind(now())
-                .execute(&state.db.pool)
+                .execute(&db.pool)
                 .await?;
         }
         Err(e) => {
@@ -146,12 +149,12 @@ pub async fn sync_item(state: &AppState, item_id: &str) -> AppResult<SyncSummary
             .bind(&log_id)
             .bind(now())
             .bind(e.to_string())
-            .execute(&state.db.pool)
+            .execute(&db.pool)
             .await?;
             sqlx::query("UPDATE items SET status = 'error', error_message = ?2 WHERE id = ?1")
                 .bind(item_id)
                 .bind(e.to_string())
-                .execute(&state.db.pool)
+                .execute(&db.pool)
                 .await?;
         }
     }
@@ -165,6 +168,7 @@ async fn sync_item_inner(
     item_id: &str,
     access_token: &str,
 ) -> AppResult<SyncSummary> {
+    let db = state.db().await?;
     let mut summary = SyncSummary {
         item_id: item_id.to_string(),
         ..Default::default()
@@ -179,14 +183,14 @@ async fn sync_item_inner(
             Err(_) => return Err(balance_err),
         },
     };
-    summary.accounts_updated = upsert_accounts(&state.db.pool, item_id, &accounts).await?;
-    snapshot_balances(&state.db.pool, item_id).await?;
+    summary.accounts_updated = upsert_accounts(&db.pool, item_id, &accounts).await?;
+    snapshot_balances(&db.pool, item_id).await?;
 
     // 2. transactions (cursor-based, paginated)
-    let account_map = account_id_map(&state.db.pool, item_id).await?;
+    let account_map = account_id_map(&db.pool, item_id).await?;
     let mut cursor: Option<String> = sqlx::query_scalar("SELECT cursor FROM items WHERE id = ?1")
         .bind(item_id)
-        .fetch_one(&state.db.pool)
+        .fetch_one(&db.pool)
         .await?;
 
     loop {
@@ -199,7 +203,7 @@ async fn sync_item_inner(
             let Some(account_uuid) = account_map.get(&t.account_id) else {
                 continue;
             };
-            let is_new = upsert_transaction(&state.db.pool, account_uuid, t).await?;
+            let is_new = upsert_transaction(&db.pool, account_uuid, t).await?;
             if is_new {
                 summary.transactions_added += 1;
             } else {
@@ -213,7 +217,7 @@ async fn sync_item_inner(
             )
             .bind(&r.transaction_id)
             .bind(item_id)
-            .execute(&state.db.pool)
+            .execute(&db.pool)
             .await?
             .rows_affected();
             summary.transactions_removed += n as usize;
@@ -224,7 +228,7 @@ async fn sync_item_inner(
             .bind(item_id)
             .bind(&page.next_cursor)
             .bind(now())
-            .execute(&state.db.pool)
+            .execute(&db.pool)
             .await?;
 
         if !page.has_more {
@@ -236,9 +240,10 @@ async fn sync_item_inner(
 }
 
 pub async fn sync_all(state: &AppState) -> AppResult<Vec<SyncSummary>> {
+    let db = state.db().await?;
     let ids: Vec<String> =
         sqlx::query_scalar("SELECT id FROM items WHERE provider = 'plaid' AND status != 'disconnected'")
-            .fetch_all(&state.db.pool)
+            .fetch_all(&db.pool)
             .await?;
     let mut out = Vec::new();
     for id in ids {
@@ -250,15 +255,18 @@ pub async fn sync_all(state: &AppState) -> AppResult<Vec<SyncSummary>> {
 // --- helpers -------------------------------------------------------------
 
 async fn access_token_for(state: &AppState, item_id: &str) -> AppResult<String> {
+    let db = state.db().await?;
     let secret_ref: Option<String> =
         sqlx::query_scalar("SELECT secret_ref FROM items WHERE id = ?1")
             .bind(item_id)
-            .fetch_optional(&state.db.pool)
+            .fetch_optional(&db.pool)
             .await?;
     let secret_ref = secret_ref.ok_or_else(|| AppError::NotFound(format!("item {item_id}")))?;
     state
-        .secrets
-        .get(&secret_ref)?
+        .secrets()
+        .await?
+        .get(&secret_ref)
+        .await?
         .ok_or_else(|| AppError::Config(format!("missing access token for item {item_id}")))
 }
 

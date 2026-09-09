@@ -5,8 +5,15 @@ Three areas: **Spending**, **Investments** (with market research), and **Net Wor
 
 ## Privacy model
 
-- Runs entirely on your machine. Data lives in a local SQLite file; API keys live
-  in the OS keychain.
+- Runs entirely on your machine. There is no server and no account.
+- **Everything is encrypted at rest.** The whole database is SQLCipher-encrypted
+  (AES-256); the key is derived from a master password you set (Argon2id) and is
+  never written to disk. You enter it every time the app starts — nothing,
+  including API keys and Plaid tokens (stored in a table inside that DB), is
+  readable without it.
+- **There is no password recovery.** No server can reset it. If you forget it the
+  data is unrecoverable; the app offers "Reset app" which wipes the database and
+  starts over.
 - The only outbound traffic is to a fixed allowlist: Plaid, SnapTrade, your chosen
   news API, and (if enabled) the research LLM. Everything else is blocked in code
   (`src-tauri/src/http.rs`).
@@ -28,7 +35,12 @@ npm run tauri dev      # run in development
 npm run tauri build    # produce a .dmg / .app (or .msi / .AppImage)
 ```
 
-On first launch an onboarding wizard collects your API keys.
+On first launch you set a **master password** (it encrypts the local database),
+then an onboarding wizard collects your API keys.
+
+If you ran an earlier build that used the macOS Keychain, you can clear the old
+entries: `security delete-generic-password -s com.financetracker.app` (repeat
+until it says "not found").
 
 ### Getting API keys
 
@@ -53,6 +65,11 @@ npm run build                   # type-check + bundle the frontend
 - **Milestone 2** — Plaid Hosted Link + polling, account/balance/transaction sync
   (cursor-based), institution linking/unlinking, per-account shared/hidden flags,
   the **Accounts** page. Shared-card charges auto-route to the review inbox.
+- **Encryption** — replaced the OS keychain with SQLCipher full-database
+  encryption gated by a master password at every launch.
+- **Milestone 3** — the **Spending** page: date-range picker, KPIs, monthly bar
+  chart, expandable category → subcategory → merchant → transaction breakdown,
+  and a searchable transaction table with inline recategorization.
 
-Next: Spending UI (3), attribution review inbox (4), SnapTrade + portfolio (5),
-over-time charts (6), net worth page (7), research (8).
+Next: attribution review inbox (4), SnapTrade + portfolio (5), over-time charts
+(6), net worth page (7), research (8).

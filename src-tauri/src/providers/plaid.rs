@@ -85,12 +85,16 @@ pub struct RemovedTransaction {
 // --- client -------------------------------------------------------------------
 
 impl PlaidClient {
-    pub fn from_secrets(http: HttpClient, secrets: &SecretStore, env: PlaidEnv) -> AppResult<Self> {
+    pub async fn from_secrets(
+        http: HttpClient,
+        secrets: &SecretStore,
+        env: PlaidEnv,
+    ) -> AppResult<Self> {
         Ok(Self {
             http,
             env,
-            client_id: secrets.require(keys::PLAID_CLIENT_ID)?,
-            secret: secrets.require(keys::PLAID_SECRET)?,
+            client_id: secrets.require(keys::PLAID_CLIENT_ID).await?,
+            secret: secrets.require(keys::PLAID_SECRET).await?,
         })
     }
 

@@ -11,9 +11,6 @@ pub enum AppError {
     #[error("migration error: {0}")]
     Migrate(#[from] sqlx::migrate::MigrateError),
 
-    #[error("keychain error: {0}")]
-    Keyring(#[from] keyring::Error),
-
     #[error("network error: {0}")]
     Http(#[from] reqwest::Error),
 
@@ -65,7 +62,6 @@ impl AppError {
     fn kind(&self) -> &'static str {
         match self {
             AppError::Db(_) | AppError::Migrate(_) => "db",
-            AppError::Keyring(_) => "keychain",
             AppError::Http(_) => "network",
             AppError::Json(_) => "serialization",
             AppError::HostNotAllowed(_) => "host_not_allowed",

@@ -1,16 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AccountView,
+  CategoryRow,
+  ChildRow,
   CredentialStatus,
   ItemView,
   LinkedItem,
   Person,
   Settings,
   SetupStatus,
+  SpendingFilter,
+  SpendingSummary,
   SyncSummary,
+  TxnOpts,
+  TxnPage,
+  VaultStatus,
 } from "./types";
 
 export const api = {
+  vaultStatus: () => invoke<VaultStatus>("vault_status"),
+  vaultInitialize: (password: string) =>
+    invoke<void>("vault_initialize", { password }),
+  vaultUnlock: (password: string) => invoke<void>("vault_unlock", { password }),
+  vaultLock: () => invoke<void>("vault_lock"),
+  vaultChangePassword: (oldPassword: string, newPassword: string) =>
+    invoke<void>("vault_change_password", { oldPassword, newPassword }),
+  vaultReset: () => invoke<void>("vault_reset"),
+
   getSetupStatus: () => invoke<SetupStatus>("get_setup_status"),
   listCredentials: () => invoke<CredentialStatus[]>("list_credentials"),
   saveCredential: (name: string, value: string) =>
@@ -35,6 +51,16 @@ export const api = {
     invoke<void>("set_account_shared", { accountId, shared }),
   setAccountHidden: (accountId: string, hidden: boolean) =>
     invoke<void>("set_account_hidden", { accountId, hidden }),
+
+  spendingSummary: (filter: SpendingFilter) =>
+    invoke<SpendingSummary>("spending_summary", { filter }),
+  spendingChildren: (filter: SpendingFilter, categoryId: string) =>
+    invoke<ChildRow[]>("spending_children", { filter, categoryId }),
+  listTransactions: (filter: SpendingFilter, opts?: TxnOpts) =>
+    invoke<TxnPage>("list_transactions", { filter, opts: opts ?? null }),
+  listCategories: () => invoke<CategoryRow[]>("list_categories"),
+  setTransactionCategory: (txnId: string, categoryId: string | null) =>
+    invoke<void>("set_transaction_category", { txnId, categoryId }),
 
   listPeople: () => invoke<Person[]>("list_people"),
   createPerson: (input: { name: string; color?: string | null }) =>

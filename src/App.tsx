@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "./lib/api";
 import Onboarding from "./routes/Onboarding";
+import Vault from "./routes/Vault";
 import Dashboard from "./routes/Dashboard";
 import Accounts from "./routes/Accounts";
 import Spending from "./routes/Spending";
@@ -21,6 +22,34 @@ const NAV = [
 ];
 
 export default function App() {
+  const qc = useQueryClient();
+  const vault = useQuery({ queryKey: ["vault-status"], queryFn: api.vaultStatus });
+
+  if (vault.isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-[var(--muted)]">
+        Loading…
+      </div>
+    );
+  }
+
+  const vstate = vault.data?.state ?? "locked";
+  if (vstate !== "unlocked") {
+    return (
+      <Vault
+        mode={vstate}
+        onUnlocked={() => {
+          qc.clear();
+          vault.refetch();
+        }}
+      />
+    );
+  }
+
+  return <AppShell />;
+}
+
+function AppShell() {
   const setup = useQuery({
     queryKey: ["setup-status"],
     queryFn: api.getSetupStatus,

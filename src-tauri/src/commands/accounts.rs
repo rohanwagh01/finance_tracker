@@ -80,19 +80,21 @@ pub async fn plaid_link_poll(
 
 #[tauri::command]
 pub async fn list_items(state: State<'_, AppState>) -> AppResult<Vec<ItemView>> {
+    let db = state.db().await?;
     sqlx::query_as::<_, ItemView>(
         "SELECT i.id, i.institution_name, i.status, i.error_message, i.last_synced_at,
                 (SELECT COUNT(*) FROM accounts a WHERE a.item_id = i.id) AS account_count
          FROM items i
          ORDER BY i.institution_name COLLATE NOCASE",
     )
-    .fetch_all(&state.db.pool)
+    .fetch_all(&db.pool)
     .await
     .map_err(Into::into)
 }
 
 #[tauri::command]
 pub async fn list_accounts(state: State<'_, AppState>) -> AppResult<Vec<AccountView>> {
+    let db = state.db().await?;
     sqlx::query_as::<_, AccountView>(
         "SELECT a.id, a.item_id, i.institution_name, a.name, a.official_name, a.mask,
                 a.type, a.subtype, a.currency, a.current_balance, a.available_balance,
@@ -100,7 +102,7 @@ pub async fn list_accounts(state: State<'_, AppState>) -> AppResult<Vec<AccountV
          FROM accounts a JOIN items i ON i.id = a.item_id
          ORDER BY i.institution_name COLLATE NOCASE, a.name COLLATE NOCASE",
     )
-    .fetch_all(&state.db.pool)
+    .fetch_all(&db.pool)
     .await
     .map_err(Into::into)
 }
@@ -117,10 +119,11 @@ pub async fn sync_all(state: State<'_, AppState>) -> AppResult<Vec<SyncSummary>>
 
 #[tauri::command]
 pub async fn unlink_item(state: State<'_, AppState>, item_id: String) -> AppResult<()> {
+    let db = state.db().await?;
     let secret_ref: Option<String> =
         sqlx::query_scalar("SELECT secret_ref FROM items WHERE id = ?1")
             .bind(&item_id)
-            .fetch_optional(&state.db.pool)
+            .fetch_optional(&db.pool)
             .await?;
     let Some(secret_ref) = secret_ref else {
         return Err(AppError::NotFound(format!("item {item_id}")));
@@ -128,17 +131,17 @@ pub async fn unlink_item(state: State<'_, AppState>, item_id: String) -> AppResu
 
     // Best-effort: tell Plaid to drop the item and clear the stored token.
     // None of this should block removing the local data.
-    if let Ok(plaid) = sync::plaid_client(&state).await {
-        if let Ok(Some(token)) = state.secrets.get(&secret_ref) {
+    if let (Ok(plaid), Ok(secrets)) = (sync::plaid_client(&state).await, state.secrets().await) {
+        if let Ok(Some(token)) = secrets.get(&secret_ref).await {
             let _ = plaid.item_remove(&token).await;
         }
+        let _ = secrets.delete(&secret_ref).await;
     }
-    let _ = state.secrets.delete(&secret_ref);
 
     // Cascades to accounts / transactions / holdings / value_snapshots / sync_log.
     sqlx::query("DELETE FROM items WHERE id = ?1")
         .bind(&item_id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     Ok(())
 }
@@ -149,11 +152,12 @@ pub async fn set_account_shared(
     account_id: String,
     shared: bool,
 ) -> AppResult<()> {
+    let db = state.db().await?;
     let res = sqlx::query("UPDATE accounts SET is_shared = ?2, updated_at = ?3 WHERE id = ?1")
         .bind(&account_id)
         .bind(shared)
         .bind(crate::util::now())
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("account {account_id}")));
@@ -166,7 +170,7 @@ pub async fn set_account_shared(
              WHERE account_id = ?1 AND review_status = 'not_required' AND amount > 0",
         )
         .bind(&account_id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     } else {
         sqlx::query(
@@ -174,7 +178,7 @@ pub async fn set_account_shared(
              WHERE account_id = ?1 AND review_status = 'pending'",
         )
         .bind(&account_id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     }
     Ok(())
@@ -186,11 +190,12 @@ pub async fn set_account_hidden(
     account_id: String,
     hidden: bool,
 ) -> AppResult<()> {
+    let db = state.db().await?;
     let res = sqlx::query("UPDATE accounts SET is_hidden = ?2, updated_at = ?3 WHERE id = ?1")
         .bind(&account_id)
         .bind(hidden)
         .bind(crate::util::now())
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await?;
     if res.rows_affected() == 0 {
         return Err(AppError::NotFound(format!("account {account_id}")));

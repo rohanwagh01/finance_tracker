@@ -11,6 +11,7 @@ import {
   Toggle,
 } from "../components/ui";
 import PeopleManager from "../components/PeopleManager";
+import SecurityCard from "../components/SecurityCard";
 
 function CredentialField({
   name,
@@ -115,10 +116,12 @@ export default function SettingsPage() {
       <h1 className="mb-6 text-xl font-semibold">Settings</h1>
 
       <div className="space-y-5">
+        <SecurityCard />
+
         <Card title="API credentials">
           <p className="mb-4 text-xs text-[var(--muted)]">
-            Stored in the macOS Keychain — never written to the database or sent
-            anywhere except the matching provider.
+            Stored inside the encrypted database — never in a plaintext file, never
+            sent anywhere except the matching provider.
           </p>
           <div className="space-y-5">
             {CRED_GROUPS.map((g) => (

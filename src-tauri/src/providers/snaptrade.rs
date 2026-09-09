@@ -19,11 +19,11 @@ pub struct SnapTradeClient {
 }
 
 impl SnapTradeClient {
-    pub fn from_secrets(http: HttpClient, secrets: &SecretStore) -> AppResult<Self> {
+    pub async fn from_secrets(http: HttpClient, secrets: &SecretStore) -> AppResult<Self> {
         Ok(Self {
             http,
-            client_id: secrets.require(keys::SNAPTRADE_CLIENT_ID)?,
-            consumer_key: secrets.require(keys::SNAPTRADE_CONSUMER_KEY)?,
+            client_id: secrets.require(keys::SNAPTRADE_CLIENT_ID).await?,
+            consumer_key: secrets.require(keys::SNAPTRADE_CONSUMER_KEY).await?,
         })
     }
 }

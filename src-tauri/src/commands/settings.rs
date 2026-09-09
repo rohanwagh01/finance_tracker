@@ -1,5 +1,5 @@
 //! Onboarding + settings commands. Credential *values* are write-only from the
-//! UI's perspective: they go into the OS keychain and are never returned.
+//! UI's perspective: they go into the encrypted `secrets` table and are never returned.
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -111,8 +111,7 @@ pub async fn save_credential(
     if value.is_empty() {
         return Err(AppError::Invalid("value must not be empty".into()));
     }
-    state.secrets.set(&name, value)?;
-    state.set_credential_present(&name, true).await
+    state.secrets().await?.set(&name, value).await
 }
 
 #[tauri::command]
@@ -120,8 +119,7 @@ pub async fn delete_credential(state: State<'_, AppState>, name: String) -> AppR
     if !keys::WELL_KNOWN.contains(&name.as_str()) {
         return Err(AppError::Invalid(format!("unknown credential name: {name}")));
     }
-    state.secrets.delete(&name)?;
-    state.set_credential_present(&name, false).await
+    state.secrets().await?.delete(&name).await
 }
 
 #[tauri::command]
@@ -154,7 +152,8 @@ pub async fn update_settings(state: State<'_, AppState>, settings: Settings) -> 
 #[tauri::command]
 pub async fn test_plaid_connection(state: State<'_, AppState>) -> AppResult<()> {
     let env = state.plaid_env().await?;
-    let client = PlaidClient::from_secrets(state.http.clone(), &state.secrets, env)?;
+    let secrets = state.secrets().await?;
+    let client = PlaidClient::from_secrets(state.http.clone(), &secrets, env).await?;
     client.health_check().await
 }
 
