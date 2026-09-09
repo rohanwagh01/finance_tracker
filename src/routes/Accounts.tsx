@@ -186,11 +186,19 @@ export default function Accounts() {
       "items",
       "accounts",
       "account-transactions",
+      "account-value-history",
       "review-count",
       "review-inbox",
       "spending-summary",
       "spending-by-person",
+      "spending-trends",
       "transactions-table",
+      // hiding/sharing an account changes net worth, allocation, and the portfolio
+      "net-worth-now",
+      "net-worth-history",
+      "asset-allocation",
+      "portfolio",
+      "portfolio-history",
     ]) {
       qc.invalidateQueries({ queryKey: [k] });
     }

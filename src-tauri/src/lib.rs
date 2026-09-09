@@ -85,6 +85,21 @@ pub fn run() {
             commands::investments::account_value_history,
             commands::networth::net_worth_history,
             commands::networth::net_worth_now,
+            commands::networth::asset_allocation,
+            commands::manual::list_manual_assets,
+            commands::manual::create_manual_asset,
+            commands::manual::update_manual_asset,
+            commands::manual::delete_manual_asset,
+            commands::manual::list_manual_liabilities,
+            commands::manual::create_manual_liability,
+            commands::manual::update_manual_liability,
+            commands::manual::delete_manual_liability,
+            commands::recurring::list_recurring,
+            commands::recurring::recurring_summary,
+            commands::recurring::create_recurring,
+            commands::recurring::update_recurring,
+            commands::recurring::delete_recurring,
+            commands::recurring::detect_recurring,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

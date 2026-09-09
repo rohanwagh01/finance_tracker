@@ -86,5 +86,14 @@ npm run build                   # type-check + bundle the frontend
   chart in the account detail modal, and a **"By category"** stacked view on the
   Spending monthly chart. History carries the last snapshot forward over
   un-synced days.
+- **Milestone 7** — the **Net Worth** page: net-worth-over-time chart with a
+  range picker, asset allocation breakdown, total assets vs. debt, and a monthly
+  cash-flow / savings-rate card. Manually-entered **assets** (car, home, cash
+  held elsewhere — with optional straight-line depreciation) and **liabilities**
+  (mortgage, loans) with full add/edit/delete, folded into net worth and its
+  history from each item's `as_of` date. **Recurring payments & income**: manual
+  entry plus a **"Detect from transactions"** scan that clusters repeating
+  merchant + amount patterns into weekly/biweekly/monthly/quarterly/yearly
+  cadences, with monthly-equivalent totals.
 
-Next: net worth page (7), research (8), packaging (9).
+Next: research (8), packaging (9).

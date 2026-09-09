@@ -1,12 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AccountView,
+  AllocationSlice,
+  AssetInput,
   CategoryRow,
   ChildRow,
   CredentialStatus,
   ItemView,
   LinkedItem,
+  LiabilityInput,
+  ManualAsset,
+  ManualLiability,
   Person,
+  Recurring,
+  RecurringInput,
+  RecurringSummary,
   Settings,
   SetupStatus,
   HistoryPoint,
@@ -79,6 +87,32 @@ export const api = {
   netWorthHistory: (from: string, to: string) =>
     invoke<HistoryPoint[]>("net_worth_history", { from, to }),
   netWorthNow: () => invoke<NetWorthNow>("net_worth_now"),
+  assetAllocation: () => invoke<AllocationSlice[]>("asset_allocation"),
+
+  listManualAssets: () => invoke<ManualAsset[]>("list_manual_assets"),
+  createManualAsset: (input: AssetInput) =>
+    invoke<string>("create_manual_asset", { input }),
+  updateManualAsset: (id: string, input: AssetInput) =>
+    invoke<void>("update_manual_asset", { id, input }),
+  deleteManualAsset: (id: string) =>
+    invoke<void>("delete_manual_asset", { id }),
+  listManualLiabilities: () =>
+    invoke<ManualLiability[]>("list_manual_liabilities"),
+  createManualLiability: (input: LiabilityInput) =>
+    invoke<string>("create_manual_liability", { input }),
+  updateManualLiability: (id: string, input: LiabilityInput) =>
+    invoke<void>("update_manual_liability", { id, input }),
+  deleteManualLiability: (id: string) =>
+    invoke<void>("delete_manual_liability", { id }),
+
+  listRecurring: () => invoke<Recurring[]>("list_recurring"),
+  recurringSummary: () => invoke<RecurringSummary>("recurring_summary"),
+  createRecurring: (input: RecurringInput) =>
+    invoke<string>("create_recurring", { input }),
+  updateRecurring: (id: string, input: RecurringInput) =>
+    invoke<void>("update_recurring", { id, input }),
+  deleteRecurring: (id: string) => invoke<void>("delete_recurring", { id }),
+  detectRecurring: () => invoke<{ added: number }>("detect_recurring"),
   accountValueHistory: (accountId: string, from: string, to: string) =>
     invoke<HistoryPoint[]>("account_value_history", { accountId, from, to }),
   spendingChildren: (filter: SpendingFilter, categoryId: string) =>

@@ -21,6 +21,11 @@ export default function Review() {
     qc.invalidateQueries({ queryKey: ["review-count"] });
     qc.invalidateQueries({ queryKey: ["spending-summary"] });
     qc.invalidateQueries({ queryKey: ["spending-by-person"] });
+    qc.invalidateQueries({ queryKey: ["spending-trends"] });
+    qc.invalidateQueries({ queryKey: ["transactions-table"] });
+    // attributing a shared-card charge to yourself changes net worth
+    qc.invalidateQueries({ queryKey: ["net-worth-now"] });
+    qc.invalidateQueries({ queryKey: ["net-worth-history"] });
   };
 
   const decide = useMutation({

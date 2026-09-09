@@ -98,8 +98,12 @@ export default function Spending() {
       "spending-txns",
       "spending-by-person",
       "transactions-table",
+      "spending-trends",
       "review-count",
       "review-inbox",
+      // reassigning a shared-card charge to/from yourself changes net worth
+      "net-worth-now",
+      "net-worth-history",
     ]) {
       qc.invalidateQueries({ queryKey: [k] });
     }

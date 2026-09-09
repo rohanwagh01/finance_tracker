@@ -4,6 +4,10 @@ import { api } from "../lib/api";
 import { money } from "../lib/format";
 import { Banner, Card } from "../components/ui";
 import ValueAreaChart from "../components/ValueAreaChart";
+import type { NetWorthNow } from "../lib/types";
+
+const totalDebt = (n: NetWorthNow | undefined) =>
+  n ? n.account_debt + n.manual_liabilities : undefined;
 
 function StatusRow({ label, ok }: { label: string; ok: boolean }) {
   return (
@@ -54,7 +58,10 @@ export default function Dashboard() {
             <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-[var(--muted)]">
               <span>Cash {money(nw.data.cash)}</span>
               <span>Investments {money(nw.data.investments)}</span>
-              <span className="text-red-500">Debt {money(nw.data.debt)}</span>
+              {nw.data.manual_assets > 0 && (
+                <span>Manual assets {money(nw.data.manual_assets)}</span>
+              )}
+              <span className="text-red-500">Debt {money(totalDebt(nw.data))}</span>
             </div>
           )}
         </Card>
@@ -86,7 +93,7 @@ export default function Dashboard() {
               </div>
               <div className="flex justify-between">
                 <span>Card & loan balances</span>
-                <span className="font-semibold text-red-500">{money(nw.data?.debt)}</span>
+                <span className="font-semibold text-red-500">{money(totalDebt(nw.data))}</span>
               </div>
               <div className="mt-1 flex justify-between border-t border-[var(--border)] pt-1.5">
                 <span>Net</span>

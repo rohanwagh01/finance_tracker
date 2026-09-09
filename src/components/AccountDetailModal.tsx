@@ -59,7 +59,14 @@ export default function AccountDetailModal({
       "review-inbox",
       "spending-summary",
       "spending-by-person",
+      "spending-trends",
       "transactions-table",
+      "account-value-history",
+      "net-worth-now",
+      "net-worth-history",
+      "asset-allocation",
+      "portfolio",
+      "portfolio-history",
     ]) {
       qc.invalidateQueries({ queryKey: [k] });
     }

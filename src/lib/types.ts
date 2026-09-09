@@ -243,8 +243,85 @@ export interface SpendingTrends {
 export interface NetWorthNow {
   cash: number;
   investments: number;
-  debt: number;
+  manual_assets: number;
+  account_debt: number;
+  manual_liabilities: number;
   net: number;
+}
+
+export interface AllocationSlice {
+  label: string;
+  value: number;
+}
+
+export interface ManualAsset {
+  id: string;
+  name: string;
+  kind: string;
+  value: number;
+  current_value: number;
+  as_of: string;
+  depreciation_annual_pct: number | null;
+  note: string | null;
+}
+
+export interface AssetInput {
+  name: string;
+  kind: string;
+  value: number;
+  as_of: string;
+  depreciation_annual_pct?: number | null;
+  note?: string | null;
+}
+
+export interface ManualLiability {
+  id: string;
+  name: string;
+  kind: string;
+  balance: number;
+  as_of: string;
+  apr: number | null;
+  minimum_payment: number | null;
+  note: string | null;
+}
+
+export interface LiabilityInput {
+  name: string;
+  kind: string;
+  balance: number;
+  as_of: string;
+  apr?: number | null;
+  minimum_payment?: number | null;
+  note?: string | null;
+}
+
+export interface Recurring {
+  id: string;
+  label: string;
+  amount: number;
+  cadence: string;
+  kind: "expense" | "income";
+  monthly_equiv: number;
+  category_id: string | null;
+  category_label: string | null;
+  source: "manual" | "detected";
+  active: boolean;
+  next_due: string | null;
+}
+
+export interface RecurringInput {
+  label: string;
+  amount: number;
+  cadence: string;
+  kind: "expense" | "income";
+  category_id?: string | null;
+  next_due?: string | null;
+  active?: boolean | null;
+}
+
+export interface RecurringSummary {
+  monthly_expense: number;
+  monthly_income: number;
 }
 
 export interface Person {
