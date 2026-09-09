@@ -9,7 +9,9 @@ import type {
   Person,
   Settings,
   SetupStatus,
+  HistoryPoint,
   PersonSpend,
+  Portfolio,
   ReviewRow,
   RuleInput,
   RuleView,
@@ -42,6 +44,10 @@ export const api = {
     invoke<void>("update_settings", { settings }),
   testPlaidConnection: () => invoke<void>("test_plaid_connection"),
   completeOnboarding: () => invoke<void>("complete_onboarding"),
+
+  portfolio: () => invoke<Portfolio>("portfolio"),
+  portfolioHistory: (from: string, to: string) =>
+    invoke<HistoryPoint[]>("portfolio_history", { from, to }),
 
   plaidLinkStart: () => invoke<{ link_token: string }>("plaid_link_start"),
   plaidLinkPoll: (linkToken: string) =>

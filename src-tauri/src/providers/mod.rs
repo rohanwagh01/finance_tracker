@@ -2,7 +2,6 @@
 //! transaction, holding, and liability endpoints are ever called.
 
 pub mod plaid;
-pub mod snaptrade;
 
 use serde::{Deserialize, Serialize};
 

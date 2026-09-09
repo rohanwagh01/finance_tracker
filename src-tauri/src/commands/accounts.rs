@@ -73,7 +73,8 @@ pub struct AccountView {
 pub async fn plaid_link_start(app: AppHandle, state: State<'_, AppState>) -> AppResult<LinkStart> {
     let plaid = sync::plaid_client(&state).await?;
     let user_id = sync::plaid_user_id(&state).await?;
-    let (link_token, url) = plaid.create_hosted_link_token(&user_id).await?;
+    let days = crate::commands::settings::history_days_requested(&state).await?;
+    let (link_token, url) = plaid.create_hosted_link_token(&user_id, days).await?;
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| AppError::Other(format!("could not open browser: {e}")))?;

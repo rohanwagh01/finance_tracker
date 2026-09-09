@@ -236,6 +236,11 @@ async fn sync_item_inner(
         }
     }
 
+    // 3. investment holdings (brokerages linked through Plaid). Non-fatal.
+    if let Ok(Some(inv)) = plaid.investments_holdings_get(access_token).await {
+        let _ = crate::investments::persist(&db.pool, item_id, &inv).await;
+    }
+
     // Run attribution rules over anything now sitting in the review inbox.
     let auto_confirm = state
         .config_get_or("auto_confirm_high_confidence", "false")

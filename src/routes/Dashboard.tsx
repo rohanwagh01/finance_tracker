@@ -35,8 +35,7 @@ export default function Dashboard() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <Card title="Connections">
-          <StatusRow label="Plaid (banks & cards)" ok={!!setup.data?.plaid_configured} />
-          <StatusRow label="SnapTrade (brokerages)" ok={!!setup.data?.snaptrade_configured} />
+          <StatusRow label="Plaid (banks, cards, brokerages)" ok={!!setup.data?.plaid_configured} />
           <StatusRow
             label={`Research LLM (${setup.data?.llm_provider ?? "none"})`}
             ok={!!setup.data?.llm_configured}

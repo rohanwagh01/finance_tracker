@@ -136,7 +136,12 @@ impl PlaidClient {
     // --- link ----------------------------------------------------------------
 
     /// Create a Hosted Link token. Returns `(link_token, hosted_link_url)`.
-    pub async fn create_hosted_link_token(&self, client_user_id: &str) -> AppResult<(String, String)> {
+    /// `days_requested` is the transaction-history window (Plaid max 730).
+    pub async fn create_hosted_link_token(
+        &self,
+        client_user_id: &str,
+        days_requested: i64,
+    ) -> AppResult<(String, String)> {
         let v = self
             .post(
                 "/link/token/create",
@@ -146,6 +151,8 @@ impl PlaidClient {
                     "country_codes": ["US"],
                     "user": { "client_user_id": client_user_id },
                     "products": ["transactions"],
+                    "additional_consented_products": ["investments"],
+                    "transactions": { "days_requested": days_requested.clamp(1, 730) },
                     "hosted_link": {}
                 }),
             )
@@ -278,6 +285,33 @@ impl PlaidClient {
         match self.post("/transactions/sync", body).await {
             Ok(v) => Self::de(v).map(Some),
             Err(AppError::Provider { code: Some(c), .. }) if c == "PRODUCT_NOT_READY" => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `/investments/holdings/get` → the raw `{ accounts, securities, holdings }`
+    /// object. `Ok(None)` when the item has no investment accounts or Plaid is
+    /// still preparing the data, so a bank-only item doesn't error the sync.
+    pub async fn investments_holdings_get(&self, access_token: &str) -> AppResult<Option<Value>> {
+        match self
+            .post(
+                "/investments/holdings/get",
+                json!({ "access_token": access_token }),
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(AppError::Provider { code: Some(c), .. })
+                if matches!(
+                    c.as_str(),
+                    "PRODUCT_NOT_READY"
+                        | "NO_INVESTMENT_ACCOUNTS"
+                        | "PRODUCTS_NOT_SUPPORTED"
+                        | "NO_ACCOUNTS"
+                ) =>
+            {
+                Ok(None)
+            }
             Err(e) => Err(e),
         }
     }

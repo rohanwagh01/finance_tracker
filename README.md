@@ -75,6 +75,10 @@ npm run build                   # type-check + bundle the frontend
   that pre-fills the suggested person (contains / equals / regex / amount
   comparisons, optional auto-confirm for high-confidence rules), and per-person
   spending on the Spending page.
+- **Milestone 5** — Investments through **Plaid Investments** (`/investments/holdings/get`):
+  brokerage holdings sync alongside transactions, and the **Investments** page —
+  portfolio value / cost basis / gain, combined and per-account holdings tables
+  with allocation. A **"pull history since"** date in Settings sets the Plaid
+  transaction window (up to Plaid's ~2-year max).
 
-Next: SnapTrade + portfolio (5), over-time charts (6), net worth page (7),
-research (8).
+Next: over-time charts (6), net worth page (7), research (8).

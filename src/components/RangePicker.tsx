@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 export type Range = { from: string; to: string };
 
-const PRESETS = ["1M", "3M", "6M", "12M", "YTD"] as const;
+const PRESETS = ["1M", "3M", "6M", "12M", "24M", "YTD"] as const;
 type Preset = (typeof PRESETS)[number] | "Custom";
 
 function iso(d: Date): string {
@@ -14,7 +14,9 @@ function presetRange(p: Preset): Range {
   const to = iso(now);
   if (p === "YTD") return { from: `${now.getFullYear()}-01-01`, to };
   const months =
-    ({ "1M": 1, "3M": 3, "6M": 6, "12M": 12 } as Record<string, number>)[p] ?? 3;
+    ({ "1M": 1, "3M": 3, "6M": 6, "12M": 12, "24M": 24 } as Record<string, number>)[
+      p
+    ] ?? 3;
   const from = new Date(now);
   from.setMonth(from.getMonth() - months);
   return { from: iso(from), to };

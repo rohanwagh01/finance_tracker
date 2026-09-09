@@ -20,7 +20,6 @@ pub struct CredentialStatus {
 pub struct SetupStatus {
     pub onboarding_complete: bool,
     pub plaid_configured: bool,
-    pub snaptrade_configured: bool,
     pub llm_provider: String,
     pub llm_configured: bool,
 }
@@ -28,6 +27,9 @@ pub struct SetupStatus {
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
     pub plaid_env: String,
+    /// Oldest date to pull / keep history for (ISO `YYYY-MM-DD`). Plaid can only
+    /// go back ~730 days, so earlier dates just cap there.
+    pub history_start_date: String,
     pub llm_provider: String,   // "anthropic" | "ollama" | "none"
     pub anthropic_model: String,
     pub ollama_url: String,
@@ -36,10 +38,20 @@ pub struct Settings {
     pub auto_confirm_high_confidence: bool,
 }
 
+/// Default history window: the Plaid maximum, ~24 months.
+pub const MAX_HISTORY_DAYS: i64 = 730;
+
+fn default_history_start() -> String {
+    (chrono::Utc::now() - chrono::Duration::days(MAX_HISTORY_DAYS))
+        .format("%Y-%m-%d")
+        .to_string()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             plaid_env: "sandbox".into(),
+            history_start_date: default_history_start(),
             llm_provider: "none".into(),
             anthropic_model: "claude-sonnet-5".into(),
             ollama_url: "http://localhost:11434".into(),
@@ -50,10 +62,49 @@ impl Default for Settings {
     }
 }
 
+fn days_from_start(start: &str) -> i64 {
+    chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d")
+        .ok()
+        .map(|d| (chrono::Utc::now().date_naive() - d).num_days())
+        .unwrap_or(MAX_HISTORY_DAYS)
+        .clamp(1, MAX_HISTORY_DAYS)
+}
+
+/// Number of days of Plaid transaction history to request at link time,
+/// derived from `history_start_date` and clamped to Plaid's max.
+pub async fn history_days_requested(state: &AppState) -> AppResult<i64> {
+    let start = state
+        .config_get_or("history_start_date", &default_history_start())
+        .await?;
+    Ok(days_from_start(&start))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::days_from_start;
+
+    #[test]
+    fn history_days_are_clamped_to_plaid_max() {
+        assert_eq!(days_from_start("1990-01-01"), 730);
+        assert_eq!(days_from_start("garbage"), 730);
+        let recent = (chrono::Utc::now() - chrono::Duration::days(45))
+            .format("%Y-%m-%d")
+            .to_string();
+        assert_eq!(days_from_start(&recent), 45);
+        let future = (chrono::Utc::now() + chrono::Duration::days(10))
+            .format("%Y-%m-%d")
+            .to_string();
+        assert_eq!(days_from_start(&future), 1);
+    }
+}
+
 async fn load_settings(state: &AppState) -> AppResult<Settings> {
     let d = Settings::default();
     Ok(Settings {
         plaid_env: state.config_get_or("plaid_env", &d.plaid_env).await?,
+        history_start_date: state
+            .config_get_or("history_start_date", &d.history_start_date)
+            .await?,
         llm_provider: state.config_get_or("llm_provider", &d.llm_provider).await?,
         anthropic_model: state.config_get_or("anthropic_model", &d.anthropic_model).await?,
         ollama_url: state.config_get_or("ollama_url", &d.ollama_url).await?,
@@ -79,8 +130,6 @@ pub async fn get_setup_status(state: State<'_, AppState>) -> AppResult<SetupStat
         onboarding_complete: s.config_get("onboarding_complete").await?.as_deref() == Some("true"),
         plaid_configured: s.credential_present(keys::PLAID_CLIENT_ID).await?
             && s.credential_present(keys::PLAID_SECRET).await?,
-        snaptrade_configured: s.credential_present(keys::SNAPTRADE_CLIENT_ID).await?
-            && s.credential_present(keys::SNAPTRADE_CONSUMER_KEY).await?,
         llm_provider,
         llm_configured,
     })
@@ -132,6 +181,12 @@ pub async fn update_settings(state: State<'_, AppState>, settings: Settings) -> 
     let s = &*state;
     let env = PlaidEnv::parse(&settings.plaid_env);
     s.config_set("plaid_env", env.as_str()).await?;
+
+    let start = settings.history_start_date.trim();
+    if chrono::NaiveDate::parse_from_str(start, "%Y-%m-%d").is_err() {
+        return Err(AppError::Invalid("history start date must be YYYY-MM-DD".into()));
+    }
+    s.config_set("history_start_date", start).await?;
 
     if !["anthropic", "ollama", "none"].contains(&settings.llm_provider.as_str()) {
         return Err(AppError::Invalid("llm_provider must be anthropic, ollama, or none".into()));

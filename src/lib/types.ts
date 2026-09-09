@@ -7,7 +7,6 @@ export interface VaultStatus {
 export interface SetupStatus {
   onboarding_complete: boolean;
   plaid_configured: boolean;
-  snaptrade_configured: boolean;
   llm_provider: string;
   llm_configured: boolean;
 }
@@ -19,6 +18,7 @@ export interface CredentialStatus {
 
 export interface Settings {
   plaid_env: string;
+  history_start_date: string;
   llm_provider: "anthropic" | "ollama" | "none";
   anthropic_model: string;
   ollama_url: string;
@@ -191,6 +191,44 @@ export interface RuleInput {
   enabled?: boolean | null;
 }
 
+export interface PortfolioPosition {
+  ticker: string | null;
+  name: string | null;
+  sec_type: string | null;
+  quantity: number;
+  price: number | null;
+  value: number;
+  cost_basis: number | null;
+  gain: number | null;
+  gain_pct: number | null;
+  allocation_pct: number;
+}
+
+export interface PortfolioAccount {
+  id: string;
+  name: string;
+  official_name: string | null;
+  mask: string | null;
+  value: number;
+  cash: number;
+  positions: PortfolioPosition[];
+}
+
+export interface Portfolio {
+  total_value: number;
+  total_cost_basis: number | null;
+  total_cash: number;
+  total_gain: number | null;
+  accounts: PortfolioAccount[];
+  combined: PortfolioPosition[];
+  last_synced_at: string | null;
+}
+
+export interface HistoryPoint {
+  date: string;
+  value: number;
+}
+
 export interface Person {
   id: string;
   name: string;
@@ -207,8 +245,6 @@ export interface AppError {
 export const CREDENTIAL_LABELS: Record<string, string> = {
   "plaid.client_id": "Plaid Client ID",
   "plaid.secret": "Plaid Secret",
-  "snaptrade.client_id": "SnapTrade Client ID",
-  "snaptrade.consumer_key": "SnapTrade Consumer Key",
   "anthropic.api_key": "Anthropic API Key",
   "finnhub.api_key": "Finnhub API Key",
   "marketaux.api_key": "Marketaux API Key",

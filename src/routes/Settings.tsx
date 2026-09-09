@@ -66,10 +66,9 @@ function CredentialField({
 }
 
 const CRED_GROUPS: { title: string; names: string[] }[] = [
-  { title: "Plaid — banks & cards", names: ["plaid.client_id", "plaid.secret"] },
   {
-    title: "SnapTrade — brokerages",
-    names: ["snaptrade.client_id", "snaptrade.consumer_key"],
+    title: "Plaid — banks, cards & brokerages",
+    names: ["plaid.client_id", "plaid.secret"],
   },
   {
     title: "Research — LLM & news (optional)",
@@ -143,7 +142,7 @@ export default function SettingsPage() {
             ))}
           </div>
 
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-3">
             <Button
               variant="ghost"
               disabled={testPlaid.isPending}
@@ -185,6 +184,16 @@ export default function SettingsPage() {
                 <option value="sandbox">Sandbox (test data)</option>
                 <option value="production">Production (real accounts)</option>
               </Select>
+
+              <TextField
+                label="Pull history since"
+                type="date"
+                value={form.history_start_date}
+                onChange={(e) =>
+                  setForm({ ...form, history_start_date: e.target.value })
+                }
+                hint="Applies to newly linked institutions. Plaid caps history at ~2 years."
+              />
 
               <Select
                 label="Research LLM"

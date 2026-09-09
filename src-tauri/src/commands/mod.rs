@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod investments;
 pub mod people;
 pub mod review;
 pub mod settings;

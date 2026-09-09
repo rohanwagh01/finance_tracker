@@ -2,6 +2,7 @@ mod commands;
 mod db;
 mod error;
 mod http;
+mod investments;
 mod providers;
 mod research;
 mod rules;
@@ -78,6 +79,8 @@ pub fn run() {
             commands::review::update_rule,
             commands::review::delete_rule,
             commands::review::apply_rules_now,
+            commands::investments::portfolio,
+            commands::investments::portfolio_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

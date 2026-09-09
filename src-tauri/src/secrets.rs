@@ -12,8 +12,6 @@ use crate::util::now;
 pub mod keys {
     pub const PLAID_CLIENT_ID: &str = "plaid.client_id";
     pub const PLAID_SECRET: &str = "plaid.secret";
-    pub const SNAPTRADE_CLIENT_ID: &str = "snaptrade.client_id";
-    pub const SNAPTRADE_CONSUMER_KEY: &str = "snaptrade.consumer_key";
     pub const ANTHROPIC_API_KEY: &str = "anthropic.api_key";
     pub const FINNHUB_API_KEY: &str = "finnhub.api_key";
     pub const MARKETAUX_API_KEY: &str = "marketaux.api_key";
@@ -22,8 +20,6 @@ pub mod keys {
     pub const WELL_KNOWN: &[&str] = &[
         PLAID_CLIENT_ID,
         PLAID_SECRET,
-        SNAPTRADE_CLIENT_ID,
-        SNAPTRADE_CONSUMER_KEY,
         ANTHROPIC_API_KEY,
         FINNHUB_API_KEY,
         MARKETAUX_API_KEY,
